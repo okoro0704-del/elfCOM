@@ -1,6 +1,7 @@
-# Used when Netlify "Base directory" = apps/web
+# Prefer the repo-root netlify.toml when deploying the monorepo.
+# If Netlify's base directory is set to apps/web, use these paths instead:
 [build]
-  command = "npm run build"
+  command = "cd ../.. && npm install && npm run build -w @elfcom/web"
   publish = "dist"
 
 [build.environment]

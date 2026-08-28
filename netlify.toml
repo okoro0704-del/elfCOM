@@ -1,6 +1,3 @@
-# Netlify — ElfCom Web PWA (repo root)
-# Site: https://elfcom.netlify.app
-
 [build]
   command = "npm install && npm run build -w @elfcom/web"
   publish = "apps/web/dist"
