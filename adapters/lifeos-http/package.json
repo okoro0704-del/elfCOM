@@ -14,7 +14,7 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "npm run build -w @elfcom/contract && npm run build -w @elfcom/crypto && tsc -p tsconfig.json",
     "dev": "tsc --watch"
   },
   "dependencies": {

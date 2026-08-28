@@ -14,9 +14,11 @@ Workspace packages (`@elfcom/contract`, `@elfcom/crypto`, …) were never built,
 | Setting | Value |
 |---------|--------|
 | Root directory | `/` (monorepo root) |
-| Build command | `npm run build --workspace=@elfcom/node` (default OK) |
-| Start command | `npm run start --workspace=@elfcom/node` |
+| **Build command** | `npm run build --workspace=@elfcom/node` |
+| **Start command** | `npm run start --workspace=@elfcom/node` |
 | Node | ≥ 20 |
+
+Do **not** build `@elfcom/lifeos-adapter` on Railway — that package is a LifeOS client library, not the API server. `railway.toml` pins the build/start commands to `@elfcom/node`.
 
 ## Env vars
 
