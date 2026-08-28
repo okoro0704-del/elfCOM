@@ -11,8 +11,13 @@ import { persistenceEnabled } from "./persistence/postgres.js";
 const app = Fastify({ logger: true });
 
 await app.register(cors, {
-  // Dev: allow any origin. Prod: set CORS_ORIGINS to your Netlify URL(s).
-  origin: config.corsOrigins.length > 0 ? config.corsOrigins : config.isDev,
+  // Dev: allow any origin. Prod: set CORS_ORIGINS (comma list) or "*" for any.
+  origin:
+    config.corsOrigins.length === 0
+      ? config.isDev
+      : config.corsOrigins.includes("*")
+        ? true
+        : config.corsOrigins,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Authorization", "Content-Type"],
 });
