@@ -1,0 +1,14 @@
+# Netlify — ElfCom Web PWA (repo root)
+# Site: https://elfcom.netlify.app
+
+[build]
+  command = "npm install && npm run build -w @elfcom/web"
+  publish = "apps/web/dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
