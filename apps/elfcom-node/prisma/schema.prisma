@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Sealed thread metadata (no plaintext titles).
+model Thread {
+  id                String   @id
+  ownerTrustId      String   @map("owner_trust_id")
+  channel           String
+  peerRef           String?  @map("peer_ref")
+  titleCipherJson   String   @map("title_cipher_json")
+  titleCreatedAt    DateTime @map("title_created_at")
+  titleSealMode     String   @default("user") @map("title_seal_mode")
+  peerHandleCipher  String?  @map("peer_handle_cipher_json")
+  providerThreadHint String? @map("provider_thread_hint")
+  participantsJson  String   @default("[]") @map("participants_json")
+  unreadCount       Int      @default(0) @map("unread_count")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  messages          Message[]
+
+  @@index([ownerTrustId, updatedAt(sort: Desc)])
+  @@index([ownerTrustId, channel])
+  @@map("threads")
+}
+
+/// Ciphertext message bodies only.
+model Message {
+  id             String   @id
+  threadId       String   @map("thread_id")
+  ownerTrustId   String   @map("owner_trust_id")
+  senderId       String   @map("sender_id")
+  channel        String
+  direction      String
+  sealMode       String   @default("user") @map("seal_mode")
+  bodyCipherJson String   @map("body_cipher_json")
+  createdAt      DateTime @map("created_at")
+  thread         Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
+  @@index([ownerTrustId, createdAt(sort: Desc)])
+  @@map("messages")
+}
+
+/// Blind-indexed channel handle bindings.
+model ChannelLink {
+  id               String   @id @default(cuid())
+  ownerTrustId     String   @map("owner_trust_id")
+  channel          String
+  handleBlindIndex String   @map("handle_blind_index")
+  handleCipherJson String?  @map("handle_cipher_json")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@unique([channel, handleBlindIndex])
+  @@index([ownerTrustId, channel])
+  @@map("channel_links")
+}
+
+/// Ops audit — never store plaintext bodies.
+model AuditLog {
+  id           String   @id @default(cuid())
+  ownerTrustId String?  @map("owner_trust_id")
+  op           String
+  channel      String?
+  threadId     String?  @map("thread_id")
+  messageId    String?  @map("message_id")
+  metaJson     String?  @map("meta_json")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([ownerTrustId, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+/// Outbound delivery attempts for RouterService.
+model OutboxDelivery {
+  id                 String   @id @default(cuid())
+  ownerTrustId       String   @map("owner_trust_id")
+  threadId           String   @map("thread_id")
+  messageId          String   @map("message_id")
+  channel            String
+  status             String
+  attempts           Int      @default(0)
+  lastError          String?  @map("last_error")
+  providerMessageId  String?  @map("provider_message_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@index([status, updatedAt])
+  @@map("outbox_deliveries")
+}

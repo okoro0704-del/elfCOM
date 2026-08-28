@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+coverage/
+e2e-out.txt
+apps/elfcom-node/prisma/*.db
+apps/elfcom-node/prisma/*.db-journal
