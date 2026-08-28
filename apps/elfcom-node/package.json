@@ -25,13 +25,13 @@
   },
   "scripts": {
     "dev": "tsx watch --env-file=../../.env src/index.ts",
-    "build": "npm run build -w @elfcom/contract && npm run build -w @elfcom/crypto && npm run build -w @elfcom/connectors-core && npm run build -w @elfcom/connectors && prisma generate && tsc -p tsconfig.json",
+    "build": "npm run build -w @elfcom/contract && npm run build -w @elfcom/crypto && npm run build -w @elfcom/connectors-core && npm run build -w @elfcom/connectors && prisma generate --schema=prisma/schema.prisma && tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "start:migrate": "prisma db push --skip-generate && node dist/index.js",
+    "start:migrate": "prisma db push --schema=prisma/schema.prisma --skip-generate && node dist/index.js",
     "start:local": "node --env-file=../../.env dist/index.js",
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev",
+    "db:generate": "prisma generate --schema=prisma/schema.prisma",
+    "db:push": "prisma db push --schema=prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema=prisma/schema.prisma",
     "test": "tsc -p tsconfig.json && node --import tsx --test src/services/router.service.test.ts src/services/websocket.service.test.ts src/services/primitive.test.ts tests/e2e/hospitalityos-elfcom.test.ts"
   }
 }
