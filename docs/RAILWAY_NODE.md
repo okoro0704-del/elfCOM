@@ -28,10 +28,21 @@ ELFCOM_NODE_MASTER_KEY=0123456789abcdef0123456789abcdef
 CORS_ORIGINS=https://YOUR-SITE.netlify.app
 NODE_ENV=production
 HOST=0.0.0.0
+DATABASE_URL=${{Postgres.DATABASE_URL}}
 ```
 
 Railway sets `PORT` automatically — `elfcom-node` already reads `PORT`.
 
-After deploy, open `https://YOUR-RAILWAY-URL/health`.
+### Wire Postgres (Railway)
 
-Then set Netlify `VITE_ELFCOM_BASE_URL` to that URL and redeploy the console.
+1. You should have **two** Railway services: **Postgres** + **elfcom-node** (API), same project.
+2. Open the **API** service → **Variables**.
+3. Add `DATABASE_URL` via **Add variable → Variable reference** (or “Shared variable”):
+   - Reference: `Postgres` service → `DATABASE_URL`  
+   - Result looks like: `${{Postgres.DATABASE_URL}}`  
+   (If your DB service has another name, pick that name instead of `Postgres`.)
+4. Do **not** put `DATABASE_URL` only on the Postgres service — the **API** must have it.
+5. Redeploy the API. Start command runs `prisma db push` then boots the node (creates tables).
+6. Check `GET /health` — `"persistence":"postgres"` means it’s connected. `"memory"` means `DATABASE_URL` is still missing on the API.
+
+Netlify does **not** need `DATABASE_URL` — only the API talks to Postgres.

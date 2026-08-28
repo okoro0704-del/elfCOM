@@ -13,7 +13,7 @@ builder = "RAILPACK"
 buildCommand = "npm run build --workspace=@elfcom/node"
 
 [deploy]
-startCommand = "npm run start --workspace=@elfcom/node"
+startCommand = "npm run start:migrate --workspace=@elfcom/node"
 restartPolicyType = "ON_FAILURE"
 healthcheckPath = "/health"
 healthcheckTimeout = 30

@@ -25,8 +25,9 @@
   },
   "scripts": {
     "dev": "tsx watch --env-file=../../.env src/index.ts",
-    "build": "npm run build -w @elfcom/contract && npm run build -w @elfcom/crypto && npm run build -w @elfcom/connectors-core && npm run build -w @elfcom/connectors && tsc -p tsconfig.json",
+    "build": "npm run build -w @elfcom/contract && npm run build -w @elfcom/crypto && npm run build -w @elfcom/connectors-core && npm run build -w @elfcom/connectors && prisma generate && tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "start:migrate": "prisma db push --skip-generate && node dist/index.js",
     "start:local": "node --env-file=../../.env dist/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
