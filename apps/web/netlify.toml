@@ -1,0 +1,15 @@
+# Netlify — ElfCom Web PWA (Capacitor source UI)
+# Prefer linking this site to apps/web as base directory.
+
+[build]
+  base = "apps/web"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

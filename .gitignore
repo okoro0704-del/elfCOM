@@ -3,9 +3,18 @@ dist/
 .env
 .env.*
 !.env.example
+!.env.production.example
 *.log
 .DS_Store
 coverage/
 e2e-out.txt
 apps/elfcom-node/prisma/*.db
 apps/elfcom-node/prisma/*.db-journal
+
+# Capacitor / Android local SDK paths (keep android/ + ios/ in git)
+**/android/local.properties
+**/android/.gradle/
+**/android/app/build/
+**/android/build/
+**/ios/App/Pods/
+**/ios/DerivedData/

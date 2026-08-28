@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Source Serif 4", ui-serif, Georgia, serif;
+
+  --color-ink: #071f1e;
+  --color-ink-soft: #0b2e2c;
+  --color-panel: #0f3532;
+  --color-panel-2: #13413d;
+  --color-line: #1d5651;
+  --color-mist: #9fc4bf;
+  --color-foam: #e7f4f1;
+  --color-accent: #e8a54b;
+  --color-accent-deep: #c47d22;
+  --color-danger: #e06b6b;
+  --color-ok: #3ecf8e;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    background: var(--color-ink);
+    color: var(--color-foam);
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  button,
+  input,
+  textarea {
+    font: inherit;
+  }
+}
+
+@layer utilities {
+  .safe-pb {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .safe-pt {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .app-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+}
