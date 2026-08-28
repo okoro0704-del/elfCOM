@@ -1,0 +1,19 @@
+# Railway / Railpack — ElfCom API (@elfcom/node)
+# Root directory: repository root (monorepo)
+# Build: npm run build --workspace=@elfcom/node  (builds workspace deps then tsc)
+# Start: npm run start --workspace=@elfcom/node
+#
+# Required env:
+#   LIFEOS_JWT_SECRET=...
+#   ELFCOM_NODE_MASTER_KEY=...   (32-byte key)
+#   CORS_ORIGINS=https://your-console.netlify.app
+# Optional:
+#   PORT (Railway sets this)
+#   DATABASE_URL (omit = in-memory)
+
+[build]
+builder = "RAILPACK"
+
+[deploy]
+startCommand = "npm run start --workspace=@elfcom/node"
+restartPolicyType = "ON_FAILURE"

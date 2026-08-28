@@ -1,0 +1,20 @@
+# Netlify — ElfCom Console (static UI only)
+# Base directory in Netlify UI: apps/elfcom-console
+# Build command: npm run build
+# Publish directory: apps/elfcom-console/dist
+#
+# Required env (Site settings → Environment variables), then Trigger deploy:
+#   VITE_ELFCOM_BASE_URL=https://YOUR-ELFCOM-NODE.example.com
+#   VITE_ELFCOM_NODE_SECRET=<same as LIFEOS_JWT_SECRET on the node>
+#   VITE_ELFCOM_JWT_ISS=lifeos
+#   VITE_ELFCOM_JWT_AUD=elfcom
+
+[build]
+  base = "apps/elfcom-console"
+  command = "npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

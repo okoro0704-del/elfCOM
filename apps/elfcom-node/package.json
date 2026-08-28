@@ -8,6 +8,7 @@
     "@elfcom/connectors-core": "*",
     "@elfcom/contract": "*",
     "@elfcom/crypto": "*",
+    "@fastify/cors": "^11.3.0",
     "@fastify/websocket": "^11.3.0",
     "@prisma/client": "^6.19.3",
     "fastify": "^5.2.1",
@@ -24,11 +25,12 @@
   },
   "scripts": {
     "dev": "tsx watch --env-file=../../.env src/index.ts",
-    "build": "tsc",
-    "start": "node --env-file=../../.env dist/index.js",
+    "build": "npm run build -w @elfcom/contract && npm run build -w @elfcom/crypto && npm run build -w @elfcom/connectors-core && npm run build -w @elfcom/connectors && tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "start:local": "node --env-file=../../.env dist/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
-    "test": "tsc && node --import tsx --test src/services/router.service.test.ts src/services/websocket.service.test.ts src/services/primitive.test.ts tests/e2e/hospitalityos-elfcom.test.ts"
+    "test": "tsc -p tsconfig.json && node --import tsx --test src/services/router.service.test.ts src/services/websocket.service.test.ts src/services/primitive.test.ts tests/e2e/hospitalityos-elfcom.test.ts"
   }
 }

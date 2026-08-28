@@ -30,4 +30,9 @@ export const config = {
   trustIdJwksUrl: process.env.TRUSTID_JWKS_URL ?? "",
   trustIdIssuer: process.env.TRUSTID_ISSUER ?? "",
   trustIdAudience: process.env.TRUSTID_AUDIENCE ?? "elfcom",
+  /** Comma-separated browser origins allowed to call the API (Netlify console, etc.). */
+  corsOrigins: (process.env.CORS_ORIGINS ?? process.env.ELFCOM_CORS_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
 };

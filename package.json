@@ -8,14 +8,16 @@
     "packages/*",
     "adapters/*"
   ],
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "npm@10.9.2",
   "scripts": {
     "build": "npm run build -w @elfcom/contract && npm run build -w @elfcom/crypto && npm run build -w @elfcom/connectors-core && npm run build -w @elfcom/connectors && npm run build -w @elfcom/lifeos-adapter && npm run build -w @elfcom/node && npm run build -w @elfcom/console",
+    "build:node": "npm run build -w @elfcom/node",
     "dev": "npm run dev -w @elfcom/node",
     "dev:console": "npm run dev -w @elfcom/console",
     "start": "npm run start -w @elfcom/node",
     "test": "npm run test -w @elfcom/crypto && npm run test -w @elfcom/connectors && npm run test -w @elfcom/node"
-  },
-  "engines": {
-    "node": ">=20"
   }
 }

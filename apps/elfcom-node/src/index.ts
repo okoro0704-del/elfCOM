@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import cors from "@fastify/cors";
 import { createConnectorRegistry } from "@elfcom/connectors";
 import { config } from "./config.js";
 import { primitiveRoutes, websocketRoutes } from "./routes/primitive.js";
@@ -8,6 +9,13 @@ import { messagingService } from "./services/messaging.js";
 import { persistenceEnabled } from "./persistence/postgres.js";
 
 const app = Fastify({ logger: true });
+
+await app.register(cors, {
+  // Dev: allow any origin. Prod: set CORS_ORIGINS to your Netlify URL(s).
+  origin: config.corsOrigins.length > 0 ? config.corsOrigins : config.isDev,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Authorization", "Content-Type"],
+});
 
 const registry = createConnectorRegistry({
   CONNECTORS_ENABLED: config.connectorsEnabled,

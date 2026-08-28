@@ -88,7 +88,14 @@ export class ElfComConsoleClient {
       }),
     });
     if (!res.ok && res.status !== 204) {
-      throw new Error(`session bind failed: ${res.status} ${await res.text()}`);
+      const detail = (await res.text()).slice(0, 200);
+      if (res.status === 404) {
+        throw new Error(
+          `session bind failed: 404 — elfcom-node API not found at ${this.cfg.baseUrl || "(same origin)"}. ` +
+            `Set VITE_ELFCOM_BASE_URL to your API URL (Netlify only hosts the UI). ${detail}`,
+        );
+      }
+      throw new Error(`session bind failed: ${res.status} ${detail}`);
     }
     this.bound = true;
   }
