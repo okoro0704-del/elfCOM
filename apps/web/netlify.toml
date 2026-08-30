@@ -1,7 +1,7 @@
-# Prefer the repo-root netlify.toml when deploying the monorepo.
-# If Netlify's base directory is set to apps/web, use these paths instead:
+# Used when Netlify packagePath / base is apps/web (CLI --filter=@elfcom/web).
+# Install from monorepo root so workspace packages resolve.
 [build]
-  command = "cd ../.. && npm install && npm run build -w @elfcom/web"
+  command = "npm --prefix ../.. install && npm --prefix ../.. run build -w @elfcom/web"
   publish = "dist"
 
 [build.environment]
