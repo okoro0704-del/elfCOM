@@ -33,10 +33,17 @@ export function UserLookupModal() {
         },
         query,
         ac.signal,
+        { failLoud: Boolean(accessToken) },
       )
         .then((r) => setUsers(r.users))
-        .catch((e) => setError(e instanceof Error ? e.message : "Search failed"))
-        .finally(() => setBusy(false));
+        .catch((e) => {
+          if (ac.signal.aborted) return;
+          setError(e instanceof Error ? e.message : "Search failed");
+          setUsers([]);
+        })
+        .finally(() => {
+          if (!ac.signal.aborted) setBusy(false);
+        });
     }, 280);
     return () => {
       window.clearTimeout(t);

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { initiateCall } from "@elfcom/webrtc";
 import { ProfileSwitcher } from "@elfcom/ui";
+import type { ProfileMode } from "@elfcom/core";
 import { useAccountStore } from "../../store/accountStore";
 import { useAuthStore } from "../../store/authStore";
 import { useChatStore } from "../../store/chatStore";
@@ -25,6 +27,8 @@ export function ChatWindow({ threadId, onBack }: Props) {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const context = useAccountStore((s) => s.context);
   const switchMode = useAccountStore((s) => s.switchMode);
+  const needsSetup = useAccountStore((s) => s.needsSetup);
+  const navigate = useNavigate();
   const setHideChrome = useUiStore((s) => s.setHideChrome);
   const trustId = useAuthStore((s) => s.session?.trustId);
   const [draft, setDraft] = useState("");
@@ -108,7 +112,10 @@ export function ChatWindow({ threadId, onBack }: Props) {
             activeMode={context.activeMode}
             personalLabel={context.personal.displayName}
             businessLabel={context.business.displayName}
-            onSwitch={switchMode}
+            onSwitch={(mode: ProfileMode) => {
+              switchMode(mode);
+              if (needsSetup(mode)) navigate(`/setup/${mode.toLowerCase()}`);
+            }}
           />
         </div>
       ) : null}

@@ -1,10 +1,12 @@
 import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { TopAppBar } from "../../components/TopAppBar";
 import { useAuthStore } from "../../store/authStore";
 import { useAccountStore } from "../../store/accountStore";
 import { useChatStore } from "../../store/chatStore";
 import { useUiStore } from "../../store/uiStore";
 import { ProfileSwitcher } from "@elfcom/ui";
+import type { ProfileMode } from "@elfcom/core";
 import { UserLookupModal } from "./UserLookupModal";
 import { ChatWindow } from "../elfchat/ChatWindow";
 
@@ -24,6 +26,8 @@ export function ChatPage() {
   const trustId = useAuthStore((s) => s.session?.trustId);
   const context = useAccountStore((s) => s.context);
   const switchMode = useAccountStore((s) => s.switchMode);
+  const needsSetup = useAccountStore((s) => s.needsSetup);
+  const navigate = useNavigate();
 
   useEffect(() => {
     setHideChrome(Boolean(activeThreadId));
@@ -34,6 +38,11 @@ export function ChatPage() {
     if (trustId) useAccountStore.getState().hydrate(trustId);
   }, [trustId]);
 
+  const onSwitchMode = (mode: ProfileMode) => {
+    switchMode(mode);
+    if (needsSetup(mode)) navigate(`/setup/${mode.toLowerCase()}`);
+  };
+
   return (
     <div className="flex min-h-full flex-col">
       <TopAppBar
@@ -41,7 +50,7 @@ export function ChatPage() {
         subtitle="P2P · directory · WebRTC"
         left={
           context ? (
-            <ProfileSwitcher activeMode={context.activeMode} onSwitch={switchMode} />
+            <ProfileSwitcher activeMode={context.activeMode} onSwitch={onSwitchMode} />
           ) : undefined
         }
         right={

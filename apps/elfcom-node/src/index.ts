@@ -6,6 +6,7 @@ import { primitiveRoutes, websocketRoutes } from "./routes/primitive.js";
 import { v1Routes } from "./routes/v1.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { directoryRoutes } from "./routes/directory.js";
+import { callRoutes } from "./routes/calls.js";
 import { messagingService } from "./services/messaging.js";
 import { persistenceEnabled } from "./persistence/postgres.js";
 
@@ -48,7 +49,7 @@ app.get("/health", async () => ({
   nodeId: "elfcom",
   bound: true,
   phase: "D",
-  pillars: ["engine", "omnichannel", "primitive", "realtime", "trustid"],
+  pillars: ["engine", "omnichannel", "primitive", "realtime", "trustid", "calls", "directory"],
   connectors: registry.enabledChannels(),
   trustIdJwks: Boolean(config.trustIdJwksUrl),
   persistence: persistenceEnabled() ? "postgres" : "memory",
@@ -60,6 +61,7 @@ await primitiveRoutes(app);
 await directoryRoutes(app);
 await webhookRoutes(app, registry);
 await websocketRoutes(app);
+await callRoutes(app);
 
 await app.listen({ port: config.port, host: config.host });
 console.log(`ElfCom node listening on http://${config.host}:${config.port}`);

@@ -1,4 +1,4 @@
-import type { DirectorySearchResult, DirectoryUserCard, ProfileMode } from "../types.js";
+import type { DirectorySearchResult, DirectoryUserCard, ElfProfile, ProfileMode } from "../types.js";
 
 export type DiscoveryClientConfig = {
   /** ElfCom API base, e.g. https://elfcomnode-production.up.railway.app */
@@ -21,7 +21,7 @@ function toCard(raw: Record<string, unknown>): DirectoryUserCard {
     typeof raw.businessDomain === "string" ? raw.businessDomain : undefined;
   const addressHint =
     mode === "BUSINESS" && businessDomain
-      ? `${tidHandle.split("@")[0] ?? "mail"}@${businessDomain}`
+      ? `${tidHandle.replace(/^\$/, "").split("@")[0] ?? "mail"}@${businessDomain}`
       : undefined;
 
   return {
@@ -40,7 +40,15 @@ function toCard(raw: Record<string, unknown>): DirectoryUserCard {
   };
 }
 
-/** Client for `GET /v1/directory/search?query=...` */
+function authHeaders(token: string | null | undefined): HeadersInit {
+  return {
+    accept: "application/json",
+    "content-type": "application/json",
+    ...(token ? { authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+/** Client for directory search + profile publish. */
 export class DirectoryDiscovery {
   private readonly baseUrl: string;
   private readonly getAccessToken: () => string | null | undefined;
@@ -62,10 +70,7 @@ export class DirectoryDiscovery {
     const token = this.getAccessToken();
     const res = await this.fetchImpl(url.toString(), {
       method: "GET",
-      headers: {
-        accept: "application/json",
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
-      },
+      headers: authHeaders(token),
       signal,
     });
 
@@ -83,6 +88,35 @@ export class DirectoryDiscovery {
       query: data.query ?? q,
       users: (data.users ?? []).map(toCard),
     };
+  }
+
+  /** Publish active profile into the live directory (`PUT /v1/directory/me`). */
+  async publishProfile(profile: ElfProfile, signal?: AbortSignal): Promise<DirectoryUserCard> {
+    const token = this.getAccessToken();
+    if (!token) throw new Error("directory publish requires access token");
+
+    const res = await this.fetchImpl(joinUrl(this.baseUrl, "/v1/directory/me"), {
+      method: "PUT",
+      headers: authHeaders(token),
+      body: JSON.stringify({
+        mode: profile.mode,
+        displayName: profile.displayName,
+        bio: profile.bio,
+        avatarUrl: profile.avatarUrl,
+        tidHandle: profile.tidHandle,
+        businessDomain: profile.businessDomain,
+      }),
+      signal,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`directory publish failed: ${res.status} ${text || res.statusText}`);
+    }
+
+    const data = (await res.json()) as { user?: Record<string, unknown> };
+    if (!data.user) throw new Error("directory publish returned empty user");
+    return toCard(data.user);
   }
 }
 
@@ -149,18 +183,35 @@ export function localDirectorySearch(query: string): DirectorySearchResult {
   return { query, users };
 }
 
+export type SearchDirectoryOptions = {
+  /** When true (default if token present), do not silently fall back on HTTP errors. */
+  failLoud?: boolean;
+};
+
 export async function searchDirectory(
   config: DiscoveryClientConfig,
   query: string,
   signal?: AbortSignal,
+  opts?: SearchDirectoryOptions,
 ): Promise<DirectorySearchResult> {
   if (!config.baseUrl.trim()) {
     return localDirectorySearch(query);
   }
+  const client = new DirectoryDiscovery(config);
+  const failLoud = opts?.failLoud ?? Boolean(config.getAccessToken()?.trim());
   try {
-    const client = new DirectoryDiscovery(config);
     return await client.search(query, signal);
-  } catch {
+  } catch (err) {
+    if (failLoud) throw err;
     return localDirectorySearch(query);
   }
+}
+
+export async function publishDirectoryProfile(
+  config: DiscoveryClientConfig,
+  profile: ElfProfile,
+  signal?: AbortSignal,
+): Promise<DirectoryUserCard | null> {
+  if (!config.baseUrl.trim()) return null;
+  return new DirectoryDiscovery(config).publishProfile(profile, signal);
 }

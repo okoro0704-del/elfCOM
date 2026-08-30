@@ -60,6 +60,7 @@ export function AuthCallback() {
         const session = await exchangeOnce(code, state);
         if (!alive) return;
         setSession(session);
+        // Profile gate sends incomplete Personal setups to /setup.
         navigate("/chat", { replace: true });
       } catch (e) {
         if (alive) {

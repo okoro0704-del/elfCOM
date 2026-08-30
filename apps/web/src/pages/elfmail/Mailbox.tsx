@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { initiateCall } from "@elfcom/webrtc";
 import { ProfileSwitcher } from "@elfcom/ui";
+import type { ProfileMode } from "@elfcom/core";
 import { useAccountStore } from "../../store/accountStore";
 import { useAuthStore } from "../../store/authStore";
 import { useMailStore, type MailFolder, type MailThread } from "../../store/mailStore";
-import { useEffect } from "react";
 import { MailComposer } from "../mail/MailComposer";
 
 const folders: { id: MailFolder | "trash"; label: string }[] = [
@@ -23,6 +24,8 @@ export function Mailbox() {
   const trustId = useAuthStore((s) => s.session?.trustId);
   const context = useAccountStore((s) => s.context);
   const switchMode = useAccountStore((s) => s.switchMode);
+  const needsSetup = useAccountStore((s) => s.needsSetup);
+  const navigate = useNavigate();
   const accounts = useMailStore((s) => s.accounts);
   const activeAccountId = useMailStore((s) => s.activeAccountId);
   const setActiveAccount = useMailStore((s) => s.setActiveAccount);
@@ -82,6 +85,7 @@ export function Mailbox() {
             onSwitch={(mode) => {
               switchMode(mode);
               setActiveAccount(mode === "PERSONAL" ? "a-personal" : "a-biz");
+              if (needsSetup(mode)) navigate(`/setup/${mode.toLowerCase()}`);
             }}
           />
         ) : null}

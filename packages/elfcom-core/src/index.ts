@@ -17,5 +17,6 @@ export {
   DirectoryDiscovery,
   localDirectorySearch,
   searchDirectory,
+  publishDirectoryProfile,
 } from "./directory/discovery.js";
-export type { DiscoveryClientConfig } from "./directory/discovery.js";
+export type { DiscoveryClientConfig, SearchDirectoryOptions } from "./directory/discovery.js";
