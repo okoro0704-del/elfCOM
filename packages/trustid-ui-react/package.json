@@ -1,0 +1,17 @@
+{
+  "name": "@trustid/ui-react",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TrustID silent-assert + device-pair React helpers for ElfCom",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "peerDependencies": {
+    "react": "^18 || ^19"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.10",
+    "typescript": "^5.8.2"
+  }
+}

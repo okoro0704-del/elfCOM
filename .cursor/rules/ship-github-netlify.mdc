@@ -1,0 +1,18 @@
+---
+description: After every production cycle, commit, push GitHub, deploy Netlify
+alwaysApply: true
+---
+
+# Production cycle: GitHub + Netlify
+
+After completing a **production cycle** (feature/fix ready to ship, or user asks to ship):
+
+1. **Commit** all relevant production changes (never `.env`, credentials, `.netlify/` local state, or `netlify-sites.json`).
+2. **Push** to `origin` on the current branch (`git push -u origin HEAD` if needed).
+3. **Deploy Netlify** production for site `elfcom` (`a0af2b75-2628-4292-9776-63e9be35f2e3`):
+   - Build: `npm run build -w @elfcom/web`
+   - Deploy from repo root (avoid interactive monorepo prompts):
+     `netlify deploy --prod --no-build --dir=apps/web/dist --filter=@elfcom/web --site=a0af2b75-2628-4292-9776-63e9be35f2e3`
+4. Report the live URL: https://elfcom.netlify.app
+
+Do this **without waiting for a separate ask** when the cycle is clearly done, unless the user said not to ship yet.

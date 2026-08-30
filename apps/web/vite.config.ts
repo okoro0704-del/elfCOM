@@ -11,36 +11,68 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
       registerType: "autoUpdate",
-      includeAssets: ["favicon.svg", "apple-touch-icon.png"],
+      includeAssets: [
+        "favicon.svg",
+        "apple-touch-icon.png",
+        "icons/icon-192.png",
+        "icons/icon-512.png",
+        "icons/icon-maskable-512.png",
+        "manifest.json",
+      ],
       manifest: {
         name: "ElfCom",
         short_name: "ElfCom",
         description: "Sovereign messaging — ElfChat, ElfMail, OmniChat, OmniMail",
-        theme_color: "#0b3d3a",
-        background_color: "#071f1e",
+        theme_color: "#0F172A",
+        background_color: "#0F172A",
         display: "standalone",
-        orientation: "portrait",
+        orientation: "portrait-primary",
         start_url: "/",
         scope: "/",
         icons: [
           {
-            src: "/favicon.svg",
+            src: "favicon.svg",
             sizes: "any",
             type: "image/svg+xml",
             purpose: "any",
           },
+          {
+            src: "icons/icon-192.png",
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
+            src: "icons/icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
+            src: "icons/icon-maskable-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
         ],
       },
-      workbox: {
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-        navigateFallback: "/index.html",
+      injectManifest: {
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,webmanifest}"],
+      },
+      devOptions: {
+        enabled: false,
+        type: "module",
       },
     }),
   ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
+      "@trustid/ui-react": path.resolve(__dirname, "../../packages/trustid-ui-react/src/index.ts"),
     },
   },
   server: {
