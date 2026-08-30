@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PWAInstaller } from "./components/PWAInstaller";
 import { RequireAuth } from "./components/RequireAuth";
 import { AppLayout } from "./layouts/AppLayout";
@@ -21,25 +22,27 @@ export default function App() {
   }, [hydrate]);
 
   return (
-    <>
+    <div className="min-h-dvh bg-ink text-foam">
       <PWAInstaller />
-      <Routes>
-        <Route
-          path="/login"
-          element={hydrated && session ? <Navigate to="/chat" replace /> : <Login />}
-        />
-        <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route element={<RequireAuth />}>
-          <Route element={<AppLayout />}>
-            <Route index element={<Navigate to="/chat" replace />} />
-            <Route path="chat" element={<ChatPage />} />
-            <Route path="mail" element={<MailPage />} />
-            <Route path="omnichat" element={<OmniChatPage />} />
-            <Route path="omnimail" element={<OmniMailPage />} />
+      <ErrorBoundary label="app">
+        <Routes>
+          <Route
+            path="/login"
+            element={hydrated && session ? <Navigate to="/chat" replace /> : <Login />}
+          />
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route element={<RequireAuth />}>
+            <Route element={<AppLayout />}>
+              <Route index element={<Navigate to="/chat" replace />} />
+              <Route path="chat" element={<ChatPage />} />
+              <Route path="mail" element={<MailPage />} />
+              <Route path="omnichat" element={<OmniChatPage />} />
+              <Route path="omnimail" element={<OmniMailPage />} />
+            </Route>
           </Route>
-        </Route>
-        <Route path="*" element={<Navigate to={session ? "/chat" : "/login"} replace />} />
-      </Routes>
-    </>
+          <Route path="*" element={<Navigate to={session ? "/chat" : "/login"} replace />} />
+        </Routes>
+      </ErrorBoundary>
+    </div>
   );
 }

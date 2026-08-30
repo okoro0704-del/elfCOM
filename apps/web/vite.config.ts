@@ -4,9 +4,13 @@ import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "node:path";
 
+// Absolute `/` is required for Netlify deep links (/auth/callback, /chat, …).
+// Relative `./` breaks asset URLs on those paths (blank white page after OAuth).
+// Capacitor native builds still opt into `./` via CAPACITOR_BUILD=1.
+const capacitorBuild = process.env.CAPACITOR_BUILD === "1";
+
 export default defineConfig({
-  // Relative assets so Capacitor Android/iOS WebViews load the bundle correctly.
-  base: "./",
+  base: capacitorBuild ? "./" : "/",
   plugins: [
     react(),
     tailwindcss(),
@@ -35,25 +39,25 @@ export default defineConfig({
         scope: "/",
         icons: [
           {
-            src: "favicon.svg",
+            src: "/favicon.svg",
             sizes: "any",
             type: "image/svg+xml",
             purpose: "any",
           },
           {
-            src: "icons/icon-192.png",
+            src: "/icons/icon-192.png",
             sizes: "192x192",
             type: "image/png",
             purpose: "any",
           },
           {
-            src: "icons/icon-512.png",
+            src: "/icons/icon-512.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "any",
           },
           {
-            src: "icons/icon-maskable-512.png",
+            src: "/icons/icon-maskable-512.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",

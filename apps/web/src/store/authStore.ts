@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import type { SilentAssertResult } from "@trustid/ui-react";
 
 const STORAGE_KEY = "elfcom.trustid.session";
 
@@ -14,7 +13,12 @@ type AuthState = {
   session: TrustIdSession | null;
   hydrated: boolean;
   hydrate: () => void;
-  setSession: (result: SilentAssertResult) => void;
+  setSession: (result: {
+    accessToken: string;
+    trustId: string;
+    sid?: string;
+    expiresAt?: string;
+  }) => void;
   clearSession: () => void;
   isAuthenticated: () => boolean;
 };

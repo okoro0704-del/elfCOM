@@ -12,10 +12,12 @@ const tabs = [
 ];
 
 export function BottomNav() {
-  const chatUnread = useChatStore((s) => s.unreadTotal());
-  const mailUnread = useMailStore((s) => s.unreadTotal());
-  const omniChatUnread = useOmniStore((s) => s.omniChatUnread());
-  const omniMailUnread = useOmniStore((s) => s.omniMailUnread());
+  const chatUnread = useChatStore((s) => s.threads.reduce((n, t) => n + t.unread, 0));
+  const mailUnread = useMailStore(
+    (s) => s.threads.filter((t) => t.unread && t.folder === "inbox").length,
+  );
+  const omniChatUnread = useOmniStore((s) => s.omniChat.reduce((n, t) => n + t.unread, 0));
+  const omniMailUnread = useOmniStore((s) => s.omniMail.filter((t) => t.unread).length);
 
   const badges = {
     chat: chatUnread,
@@ -26,7 +28,7 @@ export function BottomNav() {
 
   return (
     <nav
-      className="safe-pb sticky bottom-0 z-40 border-t border-line bg-ink-soft/95 backdrop-blur-md"
+      className="safe-pb sticky bottom-0 z-40 shrink-0 border-t border-line bg-ink-soft/95 backdrop-blur-md"
       aria-label="Primary"
     >
       <ul className="grid grid-cols-4 px-1 pt-1">
@@ -37,9 +39,10 @@ export function BottomNav() {
             <li key={tab.to}>
               <NavLink
                 to={tab.to}
+                end
                 className={({ isActive }) =>
                   [
-                    "relative flex flex-col items-center gap-0.5 rounded-xl px-2 py-2 text-[11px] font-medium transition-colors",
+                    "relative flex w-full flex-col items-center gap-0.5 rounded-xl px-2 py-2 text-[11px] font-medium transition-colors",
                     isActive ? "text-accent" : "text-mist hover:text-foam",
                   ].join(" ")
                 }
