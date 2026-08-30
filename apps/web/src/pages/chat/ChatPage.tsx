@@ -1,9 +1,12 @@
 import { useEffect } from "react";
 import { TopAppBar } from "../../components/TopAppBar";
+import { useAuthStore } from "../../store/authStore";
+import { useAccountStore } from "../../store/accountStore";
 import { useChatStore } from "../../store/chatStore";
 import { useUiStore } from "../../store/uiStore";
+import { ProfileSwitcher } from "@elfcom/ui";
 import { UserLookupModal } from "./UserLookupModal";
-import { ChatDrawer } from "./ChatDrawer";
+import { ChatWindow } from "../elfchat/ChatWindow";
 
 function presenceDot(presence: string) {
   if (presence === "online") return "bg-ok";
@@ -18,17 +21,29 @@ export function ChatPage() {
   const setLookupOpen = useChatStore((s) => s.setLookupOpen);
   const setActiveThread = useChatStore((s) => s.setActiveThread);
   const setHideChrome = useUiStore((s) => s.setHideChrome);
+  const trustId = useAuthStore((s) => s.session?.trustId);
+  const context = useAccountStore((s) => s.context);
+  const switchMode = useAccountStore((s) => s.switchMode);
 
   useEffect(() => {
     setHideChrome(Boolean(activeThreadId));
     return () => setHideChrome(false);
   }, [activeThreadId, setHideChrome]);
 
+  useEffect(() => {
+    if (trustId) useAccountStore.getState().hydrate(trustId);
+  }, [trustId]);
+
   return (
     <div className="flex min-h-full flex-col">
       <TopAppBar
         title="ElfChat"
-        subtitle="P2P · email · phone · @handle"
+        subtitle="P2P · directory · WebRTC"
+        left={
+          context ? (
+            <ProfileSwitcher activeMode={context.activeMode} onSwitch={switchMode} />
+          ) : undefined
+        }
         right={
           <button
             type="button"
@@ -58,7 +73,10 @@ export function ChatPage() {
                 <span className="flex items-center justify-between gap-2">
                   <span className="truncate font-medium">{t.peer.displayName}</span>
                   <span className="shrink-0 text-[10px] text-mist">
-                    {new Date(t.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    {new Date(t.updatedAt).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </span>
                 </span>
                 <span className="mt-0.5 block truncate text-sm text-mist">
@@ -76,7 +94,7 @@ export function ChatPage() {
       </ul>
 
       {lookupOpen ? <UserLookupModal /> : null}
-      {activeThreadId ? <ChatDrawer threadId={activeThreadId} /> : null}
+      {activeThreadId ? <ChatWindow threadId={activeThreadId} /> : null}
     </div>
   );
 }

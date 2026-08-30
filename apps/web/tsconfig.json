@@ -10,8 +10,18 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@trustid/ui-react": ["../../packages/trustid-ui-react/src/index.ts"]
+      "@trustid/ui-react": ["../../packages/trustid-ui-react/src/index.ts"],
+      "@elfcom/core": ["../../packages/elfcom-core/src/index.ts"],
+      "@elfcom/webrtc": ["../../packages/webrtc/src/index.ts"],
+      "@elfcom/ui": ["../../packages/elfcom-ui/src/index.ts"]
     }
   },
-  "include": ["src", "vite.config.ts", "../../packages/trustid-ui-react/src"]
+  "include": [
+    "src",
+    "vite.config.ts",
+    "../../packages/trustid-ui-react/src",
+    "../../packages/elfcom-core/src",
+    "../../packages/webrtc/src",
+    "../../packages/elfcom-ui/src"
+  ]
 }

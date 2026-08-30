@@ -5,6 +5,7 @@ import { config } from "./config.js";
 import { primitiveRoutes, websocketRoutes } from "./routes/primitive.js";
 import { v1Routes } from "./routes/v1.js";
 import { webhookRoutes } from "./routes/webhooks.js";
+import { directoryRoutes } from "./routes/directory.js";
 import { messagingService } from "./services/messaging.js";
 import { persistenceEnabled } from "./persistence/postgres.js";
 
@@ -56,6 +57,7 @@ app.get("/health", async () => ({
 
 await v1Routes(app);
 await primitiveRoutes(app);
+await directoryRoutes(app);
 await webhookRoutes(app, registry);
 await websocketRoutes(app);
 

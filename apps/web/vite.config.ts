@@ -77,6 +77,9 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "src"),
       "@trustid/ui-react": path.resolve(__dirname, "../../packages/trustid-ui-react/src/index.ts"),
+      "@elfcom/core": path.resolve(__dirname, "../../packages/elfcom-core/src/index.ts"),
+      "@elfcom/webrtc": path.resolve(__dirname, "../../packages/webrtc/src/index.ts"),
+      "@elfcom/ui": path.resolve(__dirname, "../../packages/elfcom-ui/src/index.ts"),
     },
   },
   server: {

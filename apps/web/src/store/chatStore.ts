@@ -44,17 +44,17 @@ type ChatState = {
 
 const seedPeers: ChatPeer[] = [
   {
-    id: "p1",
+    id: "TD-AMARA01",
     displayName: "Amara Okoro",
-    handle: "@amara",
-    email: "amara@elfcom.mail",
+    handle: "$amara",
+    email: "amara@harbor.hotel",
     phone: "+2348012345678",
     presence: "online",
   },
   {
-    id: "p2",
+    id: "TD-KOFI02",
     displayName: "Kofi Mensah",
-    handle: "@kofi",
+    handle: "$kofi",
     email: "kofi@hotel.example",
     phone: "+2335550123",
     presence: "away",

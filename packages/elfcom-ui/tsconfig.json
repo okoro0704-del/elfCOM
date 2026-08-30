@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "noEmit": true,
+    "paths": {
+      "@elfcom/core": ["../elfcom-core/src/index.ts"],
+      "@elfcom/webrtc": ["../webrtc/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}
