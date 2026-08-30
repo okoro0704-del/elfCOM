@@ -1,52 +1,26 @@
-import { useEffect, useState } from "react";
-import { useDevicePair, useSilentAssert } from "@trustid/ui-react";
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { QrPanel } from "../../components/QrPanel";
 import { TRUST_ID_AUTH } from "../../lib/trustidConfig";
-import { useAuthStore } from "../../store/authStore";
+import { beginTrustIdLogin, masterDevicePairUrl } from "../../lib/trustidOAuth";
 
 type Mode = "biometric" | "qr";
 
 export function Login() {
-  const navigate = useNavigate();
-  const setSession = useAuthStore((s) => s.setSession);
   const [mode, setMode] = useState<Mode>("biometric");
-
-  const biometric = useSilentAssert(TRUST_ID_AUTH);
-  const pair = useDevicePair(TRUST_ID_AUTH, { pollMs: 2000 });
-
-  useEffect(() => {
-    if (biometric.result) {
-      setSession(biometric.result);
-      navigate("/chat", { replace: true });
-    }
-  }, [biometric.result, navigate, setSession]);
-
-  useEffect(() => {
-    if (pair.result) {
-      setSession(pair.result);
-      navigate("/chat", { replace: true });
-    }
-  }, [pair.result, navigate, setSession]);
-
-  useEffect(() => {
-    if (mode !== "qr") {
-      pair.stop();
-      return;
-    }
-    void pair.start();
-    return () => pair.stop();
-    // Intentionally only re-run when switching into QR mode.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- pair.start/stop are stable enough for mount
-  }, [mode]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const onTrustIdLogin = async () => {
-    setMode("biometric");
-    await biometric.login();
+    setError(null);
+    setBusy(true);
+    try {
+      // Redirects to TrustID (trustedid.netlify.app) where Face ID / fingerprint runs.
+      await beginTrustIdLogin();
+    } catch (e) {
+      setBusy(false);
+      setError(e instanceof Error ? e.message : "Could not start TrustID login");
+    }
   };
-
-  const error = mode === "qr" ? pair.error : biometric.error;
-  const busy = mode === "qr" ? pair.busy || Boolean(pair.session && !pair.result) : biometric.busy;
 
   return (
     <div className="relative flex min-h-full flex-col overflow-hidden bg-[#0F172A] text-foam">
@@ -89,8 +63,8 @@ export function Login() {
           </div>
           <p className="font-display text-4xl font-semibold tracking-tight text-foam">ElfCom</p>
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-mist">
-            Sovereign messaging. Sign in with Trust ID — Face ID, fingerprint, or passkey. No
-            passwords.
+            Sovereign messaging. Sign in with Trust ID — you will confirm with Face ID or
+            fingerprint on TrustID, then return here.
           </p>
         </header>
 
@@ -100,7 +74,7 @@ export function Login() {
               <button
                 type="button"
                 onClick={() => void onTrustIdLogin()}
-                disabled={biometric.busy}
+                disabled={busy}
                 className="group relative flex w-full items-center justify-center gap-3 overflow-hidden rounded-2xl bg-accent px-5 py-4 text-base font-semibold text-ink shadow-[0_10px_30px_rgba(232,165,75,0.28)] transition active:scale-[0.98] disabled:opacity-70"
               >
                 <span
@@ -108,8 +82,8 @@ export function Login() {
                   style={{ transitionDuration: "700ms" }}
                   aria-hidden
                 />
-                <BiometricGlyph busy={biometric.busy} />
-                {biometric.busy ? "Waiting for biometrics…" : "Login with Trust ID"}
+                <BiometricGlyph busy={busy} />
+                {busy ? "Opening TrustID…" : "Login with Trust ID"}
               </button>
 
               <button
@@ -126,33 +100,24 @@ export function Login() {
                 <h2 className="text-sm font-semibold text-foam">Master Device pairing</h2>
                 <button
                   type="button"
-                  onClick={() => {
-                    pair.stop();
-                    setMode("biometric");
-                  }}
+                  onClick={() => setMode("biometric")}
                   className="text-xs font-medium text-accent"
                 >
                   Back
                 </button>
               </div>
-              {pair.session?.qrPayload ? (
-                <QrPanel
-                  value={pair.session.qrPayload}
-                  label="Open Trust ID on your paired phone and scan this code"
-                />
-              ) : (
-                <div className="flex h-44 items-center justify-center text-sm text-mist">
-                  {pair.busy ? "Creating secure QR…" : "Preparing pairing session…"}
-                </div>
-              )}
-              <button
-                type="button"
-                disabled={pair.busy}
-                onClick={() => void pair.start()}
-                className="mt-4 w-full rounded-xl border border-line px-4 py-2.5 text-sm text-mist hover:text-foam"
+              <QrPanel
+                value={masterDevicePairUrl()}
+                label="Scan with your paired phone to open TrustID, then tap Login with Trust ID on this screen"
+              />
+              <a
+                href={masterDevicePairUrl()}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 block w-full rounded-xl border border-line px-4 py-2.5 text-center text-sm text-mist hover:text-foam"
               >
-                Refresh QR
-              </button>
+                Open TrustID on this device
+              </a>
             </div>
           )}
 
@@ -166,7 +131,7 @@ export function Login() {
           ) : null}
 
           <p className="text-center text-[11px] text-mist/70">
-            {busy ? "Securing session…" : `Trust ID · ${TRUST_ID_AUTH.silentAssertPath}`}
+            TrustID · {TRUST_ID_AUTH.webOrigin.replace(/^https:\/\//, "")}
           </p>
         </section>
       </main>

@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   readonly VITE_ELFCOM_JWT_ISS?: string;
   readonly VITE_ELFCOM_JWT_AUD?: string;
   readonly VITE_TRUSTID_BASE_URL?: string;
+  readonly VITE_TRUSTID_WEB_ORIGIN?: string;
 }
 
 interface ImportMeta {

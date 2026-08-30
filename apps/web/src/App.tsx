@@ -1,14 +1,15 @@
+import { useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { PWAInstaller } from "./components/PWAInstaller";
 import { RequireAuth } from "./components/RequireAuth";
 import { AppLayout } from "./layouts/AppLayout";
+import { AuthCallback } from "./pages/Auth/AuthCallback";
 import { Login } from "./pages/Auth/Login";
 import { ChatPage } from "./pages/chat/ChatPage";
 import { MailPage } from "./pages/mail/MailPage";
 import { OmniChatPage } from "./pages/omnichat/OmniChatPage";
 import { OmniMailPage } from "./pages/omnimail/OmniMailPage";
 import { useAuthStore } from "./store/authStore";
-import { useEffect } from "react";
 
 export default function App() {
   const hydrate = useAuthStore((s) => s.hydrate);
@@ -25,10 +26,9 @@ export default function App() {
       <Routes>
         <Route
           path="/login"
-          element={
-            hydrated && session ? <Navigate to="/chat" replace /> : <Login />
-          }
+          element={hydrated && session ? <Navigate to="/chat" replace /> : <Login />}
         />
+        <Route path="/auth/callback" element={<AuthCallback />} />
         <Route element={<RequireAuth />}>
           <Route element={<AppLayout />}>
             <Route index element={<Navigate to="/chat" replace />} />
