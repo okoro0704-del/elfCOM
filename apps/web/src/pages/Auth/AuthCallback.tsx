@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
 import { useAccountStore } from "../../store/accountStore";
 import { useOnboardingStore } from "../../store/onboardingStore";
+import { trustIdCreateUrl } from "../../lib/trustidConfig";
 import { beginTrustIdLogin, resolveTrustIdSession } from "../../lib/trustidOAuth";
 
 /** Deduplicate one-time OAuth code exchange across React StrictMode remounts. */
@@ -29,13 +30,22 @@ function postLoginPath(trustId: string): string {
   return "/chat";
 }
 
-/** OAuth return — exchanges code for TrustID access token, then enters ElfCom. */
+function isMissingTrustIdError(err: string | null, desc: string | null): boolean {
+  const blob = `${err ?? ""} ${desc ?? ""}`.toLowerCase();
+  return (
+    err === "login_required" ||
+    err === "interaction_required" ||
+    /no.*(passkey|credential|account|trust.?id)|user.?not.?found|not.?registered/.test(blob)
+  );
+}
+
+/** OAuth return — exchanges code, then enters ElfCom with zero chrome. */
 export function AuthCallback() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const setSession = useAuthStore((s) => s.setSession);
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState("Finishing TrustID sign-in…");
+  const [needsCreate, setNeedsCreate] = useState(false);
   const started = useRef(false);
 
   useEffect(() => {
@@ -45,39 +55,68 @@ export function AuthCallback() {
     const errDesc = params.get("error_description");
 
     if (err) {
-      setError(errDesc || err);
+      if (isMissingTrustIdError(err, errDesc)) {
+        setNeedsCreate(true);
+        return;
+      }
+      // Bounce silent failures back to login for retry / create.
+      navigate(`/login?error=${encodeURIComponent(err)}`, { replace: true });
       return;
     }
     if (!code || !state) {
-      setError("Missing TrustID authorization code");
+      navigate("/login", { replace: true });
       return;
     }
 
-    // Prevent double-start from StrictMode; shared promise still dedupes network.
     if (started.current) return;
     started.current = true;
 
     void (async () => {
       try {
-        setStatus("Exchanging TrustID credentials…");
         const session = await exchangeOnce(code, state);
-        setStatus("Opening ElfCom…");
         setSession(session);
         const dest = postLoginPath(session.trustId);
-        // Always navigate — ignore StrictMode cleanup races.
         navigate(dest, { replace: true });
-        // Hard fallback if router stalls (rare on some mobile WebViews).
         window.setTimeout(() => {
           if (window.location.pathname.includes("/auth/callback")) {
             window.location.replace(dest);
           }
-        }, 800);
+        }, 600);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "TrustID sign-in failed");
-        started.current = false;
+        const msg = e instanceof Error ? e.message : "TrustID sign-in failed";
+        if (isMissingTrustIdError(null, msg)) {
+          setNeedsCreate(true);
+        } else {
+          setError(msg);
+          started.current = false;
+        }
       }
     })();
   }, [params, navigate, setSession]);
+
+  if (needsCreate) {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-ink px-6 text-foam">
+        <p className="font-display text-3xl font-semibold">ElfCom</p>
+        <p className="mt-6 max-w-xs text-center text-sm text-mist">
+          No Trust ID found. Create one, then return here to unlock with biometrics.
+        </p>
+        <a
+          href={trustIdCreateUrl()}
+          className="mt-8 text-sm font-semibold text-accent underline-offset-4 hover:underline"
+        >
+          Create Trust ID
+        </a>
+        <button
+          type="button"
+          className="mt-4 text-xs text-mist"
+          onClick={() => navigate("/login", { replace: true })}
+        >
+          Back
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-ink px-6 text-foam">
@@ -88,24 +127,14 @@ export function AuthCallback() {
           </p>
           <button
             type="button"
-            className="rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-ink"
-            onClick={() => void beginTrustIdLogin()}
+            className="text-sm font-semibold text-accent"
+            onClick={() => void beginTrustIdLogin({ silent: true })}
           >
-            Try TrustID again
-          </button>
-          <button
-            type="button"
-            className="mt-3 block w-full text-sm text-mist"
-            onClick={() => navigate("/login", { replace: true })}
-          >
-            Back to login
+            Unlock again
           </button>
         </div>
       ) : (
-        <div className="text-center">
-          <p className="text-sm text-mist">{status}</p>
-          <p className="mt-2 text-xs text-mist/70">Usually takes a few seconds</p>
-        </div>
+        <p className="text-sm text-mist animate-pulse">Unlocking…</p>
       )}
     </div>
   );

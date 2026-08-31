@@ -1,4 +1,8 @@
-import { TRUST_ID_AUTH, trustIdCallbackUri } from "./trustidConfig";
+import {
+  TRUST_ID_AUTH,
+  trustIdCallbackUri,
+  markTrustIdOnDevice,
+} from "./trustidConfig";
 
 const OAUTH_KEY = "elfcom.trustid.oauth";
 
@@ -37,11 +41,21 @@ export function trustIdFromAccessToken(accessToken: string): string | null {
   }
 }
 
+export type BeginLoginOpts = {
+  /**
+   * Silent / zero-UI TrustID ceremony (passkey Face ID / fingerprint).
+   * Default true — ElfCom never shows a password form.
+   */
+  silent?: boolean;
+};
+
 /**
- * Start TrustID OAuth + PKCE. Biometrics run on TrustID's origin
- * (trustedid.netlify.app), then return to ElfCom /auth/callback.
+ * Start TrustID OAuth + PKCE.
+ * Silent mode: TrustID shows no chrome — only the OS biometric sheet when a
+ * passkey exists. First-time users without a TrustID are sent to create one.
  */
-export async function beginTrustIdLogin(opts?: { silent?: boolean }) {
+export async function beginTrustIdLogin(opts?: BeginLoginOpts) {
+  const silent = opts?.silent !== false;
   const verifier = randomString(64);
   const challenge = b64url(await sha256(verifier));
   const state = randomString(24);
@@ -49,7 +63,7 @@ export async function beginTrustIdLogin(opts?: { silent?: boolean }) {
 
   sessionStorage.setItem(
     OAUTH_KEY,
-    JSON.stringify({ verifier, state, redirect, startedAt: Date.now() }),
+    JSON.stringify({ verifier, state, redirect, startedAt: Date.now(), silent }),
   );
 
   const url = new URL(`${TRUST_ID_AUTH.apiBaseUrl}/oauth/authorize`);
@@ -61,9 +75,10 @@ export async function beginTrustIdLogin(opts?: { silent?: boolean }) {
   url.searchParams.set("code_challenge", challenge);
   url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("app_name", "ElfCom");
-  if (opts?.silent) {
+  if (silent) {
     url.searchParams.set("ui_mode", "silent");
     url.searchParams.set("auth_mode", "passkey");
+    url.searchParams.set("prompt", "none");
   }
 
   window.location.assign(url.toString());
@@ -159,6 +174,7 @@ export async function resolveTrustIdSession(code: string, state: string) {
     trustId = info.trustId || info.sub;
   }
   if (!trustId) throw new Error("TrustID did not return an identity");
+  markTrustIdOnDevice();
   const expiresAt =
     typeof tokens.expires_in === "number"
       ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
