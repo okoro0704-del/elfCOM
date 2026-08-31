@@ -18,3 +18,7 @@ apps/elfcom-node/prisma/*.db-journal
 **/android/build/
 **/ios/App/Pods/
 **/ios/DerivedData/
+
+.netlify/
+apps/web/.netlify/
+netlify-sites.json
