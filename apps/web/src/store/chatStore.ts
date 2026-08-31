@@ -38,76 +38,13 @@ type ChatState = {
   setLookupOpen: (open: boolean) => void;
   setActiveThread: (id: string | null) => void;
   unreadTotal: () => number;
-  startChatWith: (query: string) => void;
+  startChatWith: (query: string, peerMeta?: Partial<ChatPeer>) => void;
   sendMessage: (threadId: string, body: string) => void;
 };
 
-const seedPeers: ChatPeer[] = [
-  {
-    id: "TD-AMARA01",
-    displayName: "Amara Okoro",
-    handle: "$amara",
-    email: "amara@harbor.hotel",
-    phone: "+2348012345678",
-    presence: "online",
-  },
-  {
-    id: "TD-KOFI02",
-    displayName: "Kofi Mensah",
-    handle: "$kofi",
-    email: "kofi@hotel.example",
-    phone: "+2335550123",
-    presence: "away",
-  },
-];
-
 export const useChatStore = create<ChatState>((set, get) => ({
-  threads: [
-    {
-      id: "t1",
-      peer: seedPeers[0]!,
-      preview: "See you at the lobby desk.",
-      unread: 2,
-      typing: false,
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      id: "t2",
-      peer: seedPeers[1]!,
-      preview: "Invoice attached for tonight.",
-      unread: 0,
-      typing: true,
-      updatedAt: new Date(Date.now() - 3600_000).toISOString(),
-    },
-  ],
-  messages: {
-    t1: [
-      {
-        id: "m1",
-        threadId: "t1",
-        body: "Room 412 is ready.",
-        fromMe: false,
-        createdAt: new Date(Date.now() - 7200_000).toISOString(),
-        delivery: "read",
-      },
-      {
-        id: "m2",
-        threadId: "t1",
-        body: "Perfect — on my way.",
-        fromMe: true,
-        createdAt: new Date(Date.now() - 7000_000).toISOString(),
-        delivery: "read",
-      },
-      {
-        id: "m3",
-        threadId: "t1",
-        body: "See you at the lobby desk.",
-        fromMe: false,
-        createdAt: new Date(Date.now() - 600_000).toISOString(),
-        delivery: "delivered",
-      },
-    ],
-  },
+  threads: [],
+  messages: {},
   activeThreadId: null,
   lookupOpen: false,
   setLookupOpen: (open) => set({ lookupOpen: open }),
@@ -119,15 +56,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
   },
   unreadTotal: () => get().threads.reduce((n, t) => n + t.unread, 0),
-  startChatWith: (query) => {
-    const q = query.trim().toLowerCase();
+  startChatWith: (query, peerMeta) => {
+    const q = query.trim();
     if (!q) return;
+    const qLower = q.toLowerCase();
     const existing = get().threads.find(
       (t) =>
-        t.peer.handle.toLowerCase() === q ||
-        t.peer.email?.toLowerCase() === q ||
+        t.peer.id.toLowerCase() === qLower ||
+        t.peer.handle.toLowerCase() === qLower ||
+        t.peer.email?.toLowerCase() === qLower ||
         t.peer.phone?.replace(/\s/g, "") === q.replace(/\s/g, "") ||
-        t.peer.displayName.toLowerCase().includes(q),
+        t.peer.displayName.toLowerCase().includes(qLower),
     );
     if (existing) {
       set({ activeThreadId: existing.id, lookupOpen: false });
@@ -135,12 +74,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
     const id = `t_${Date.now()}`;
     const peer: ChatPeer = {
-      id: `p_${Date.now()}`,
-      displayName: query.startsWith("@") ? query.slice(1) : query,
-      handle: query.startsWith("@") ? query : `@${query.split("@")[0] ?? "guest"}`,
-      email: query.includes("@") && !query.startsWith("@") ? query : undefined,
-      phone: /^\+?\d[\d\s-]{6,}$/.test(query) ? query : undefined,
-      presence: "offline",
+      id: peerMeta?.id ?? q,
+      displayName: peerMeta?.displayName ?? (q.startsWith("$") ? q.slice(1) : q),
+      handle: peerMeta?.handle ?? (q.startsWith("$") || q.startsWith("@") ? q : `$${q}`),
+      email: peerMeta?.email,
+      phone: peerMeta?.phone,
+      presence: peerMeta?.presence ?? "offline",
     };
     set((s) => ({
       threads: [
@@ -181,15 +120,5 @@ export const useChatStore = create<ChatState>((set, get) => ({
           : t,
       ),
     }));
-    window.setTimeout(() => {
-      set((s) => ({
-        messages: {
-          ...s.messages,
-          [threadId]: (s.messages[threadId] ?? []).map((m) =>
-            m.id === msg.id ? { ...m, delivery: "delivered" } : m,
-          ),
-        },
-      }));
-    }, 600);
   },
 }));

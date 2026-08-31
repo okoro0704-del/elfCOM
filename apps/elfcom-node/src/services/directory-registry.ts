@@ -1,4 +1,4 @@
-/** Mutable directory registry — seeds + user-published Personal/Business cards. */
+/** Mutable directory registry — published Personal/Business cards only (no seed users). */
 
 export type DirUser = {
   trustId: string;
@@ -10,47 +10,11 @@ export type DirUser = {
   businessDomain?: string;
 };
 
-const SEEDS: DirUser[] = [
-  {
-    trustId: "TD-AMARA01",
-    tidHandle: "$amara",
-    displayName: "Amara Okoro",
-    bio: "Front desk · Harbor Hotel",
-    mode: "BUSINESS",
-    businessDomain: "harbor.hotel",
-  },
-  {
-    trustId: "TD-KOFI02",
-    tidHandle: "$kofi",
-    displayName: "Kofi Mensah",
-    bio: "Guest relations",
-    mode: "PERSONAL",
-  },
-  {
-    trustId: "TD-SMOKE01",
-    tidHandle: "$smoke",
-    displayName: "Smoke Test",
-    bio: "ElfCom QA identity",
-    mode: "PERSONAL",
-  },
-  {
-    trustId: "TD-MAYA03",
-    tidHandle: "$maya",
-    displayName: "Maya Traveler",
-    bio: "Concierge desk",
-    mode: "BUSINESS",
-    businessDomain: "harbor.hotel",
-  },
-];
-
 /** Key = `${trustId}:${mode}` */
 const published = new Map<string, DirUser>();
 
 export function listDirectoryUsers(): DirUser[] {
-  const byKey = new Map<string, DirUser>();
-  for (const u of SEEDS) byKey.set(`${u.trustId}:${u.mode}`, u);
-  for (const [k, u] of published) byKey.set(k, u);
-  return [...byKey.values()];
+  return [...published.values()];
 }
 
 export function upsertDirectoryProfile(user: DirUser): DirUser {

@@ -7,13 +7,30 @@ import { RequireProfileSetup } from "./components/RequireProfileSetup";
 import { AppLayout } from "./layouts/AppLayout";
 import { AuthCallback } from "./pages/Auth/AuthCallback";
 import { Login } from "./pages/Auth/Login";
+import { OnboardingPage } from "./pages/account/OnboardingPage";
 import { ProfileSetupPage } from "./pages/account/ProfileSetupPage";
 import { ChatPage } from "./pages/chat/ChatPage";
 import { MailPage } from "./pages/mail/MailPage";
 import { OmniChatPage } from "./pages/omnichat/OmniChatPage";
 import { OmniMailPage } from "./pages/omnimail/OmniMailPage";
 import { useAuthStore } from "./store/authStore";
+import { useAccountStore } from "./store/accountStore";
+import { useOnboardingStore } from "./store/onboardingStore";
 import type { ProfileMode } from "@elfcom/core";
+
+function postAuthHome(): string {
+  const session = useAuthStore.getState().session;
+  if (!session?.trustId) return "/login";
+  useAccountStore.getState().hydrate(session.trustId);
+  useOnboardingStore.getState().hydrate(session.trustId);
+  if (
+    useAccountStore.getState().needsSetup("PERSONAL") ||
+    useOnboardingStore.getState().needsOnboarding()
+  ) {
+    return "/onboarding";
+  }
+  return "/chat";
+}
 
 export default function App() {
   const hydrate = useAuthStore((s) => s.hydrate);
@@ -31,12 +48,15 @@ export default function App() {
         <Routes>
           <Route
             path="/login"
-            element={hydrated && session ? <Navigate to="/chat" replace /> : <Login />}
+            element={
+              hydrated && session ? <Navigate to={postAuthHome()} replace /> : <Login />
+            }
           />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route element={<RequireAuth />}>
             <Route element={<RequireProfileSetup />}>
-              <Route path="setup" element={<ProfileSetupPage />} />
+              <Route path="onboarding" element={<OnboardingPage />} />
+              <Route path="setup" element={<Navigate to="/onboarding" replace />} />
               <Route path="setup/:mode" element={<ProfileSetupByMode />} />
               <Route element={<AppLayout />}>
                 <Route index element={<Navigate to="/chat" replace />} />
@@ -47,7 +67,10 @@ export default function App() {
               </Route>
             </Route>
           </Route>
-          <Route path="*" element={<Navigate to={session ? "/chat" : "/login"} replace />} />
+          <Route
+            path="*"
+            element={<Navigate to={session ? postAuthHome() : "/login"} replace />}
+          />
         </Routes>
       </ErrorBoundary>
     </div>

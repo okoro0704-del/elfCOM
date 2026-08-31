@@ -1,41 +1,38 @@
-import { useEffect } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import { useAccountStore } from "../store/accountStore";
+import { useOnboardingStore } from "../store/onboardingStore";
 
 /**
- * Ensures Personal profile is complete before chat/mail.
- * Allows `/setup` itself and does not block Business-only incompleteness.
+ * Sync-hydrate account + onboarding, then send incomplete users to /onboarding.
  */
 export function RequireProfileSetup() {
   const location = useLocation();
   const trustId = useAuthStore((s) => s.session?.trustId);
   const context = useAccountStore((s) => s.context);
-  const hydrate = useAccountStore((s) => s.hydrate);
+  const hydrateAccount = useAccountStore((s) => s.hydrate);
+  const onboardingOwner = useOnboardingStore((s) => s.ownerTrustId);
+  const hydrateOnboarding = useOnboardingStore((s) => s.hydrate);
+  const needsOnboarding = useOnboardingStore((s) => s.needsOnboarding);
 
-  useEffect(() => {
-    if (trustId) hydrate(trustId);
-  }, [trustId, hydrate]);
+  if (trustId && (!context || context.ownerTrustId !== trustId)) {
+    hydrateAccount(trustId);
+  }
+  if (trustId && onboardingOwner !== trustId) {
+    hydrateOnboarding(trustId);
+  }
+
+  // Re-subscribe after possible hydrate
+  const freshContext = useAccountStore((s) => s.context);
 
   if (!trustId) return <Outlet />;
 
-  if (!context) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center text-sm text-mist">
-        Loading profile…
-      </div>
-    );
-  }
+  const personalNeeded = !freshContext?.personal.setupComplete;
+  const onSetup =
+    location.pathname.startsWith("/onboarding") || location.pathname.startsWith("/setup");
 
-  const personalNeeded = !context.personal.setupComplete;
-  const onSetup = location.pathname.startsWith("/setup");
-
-  if (personalNeeded && !onSetup) {
-    return <Navigate to="/setup" replace state={{ from: location.pathname }} />;
-  }
-
-  if (!personalNeeded && onSetup && location.pathname === "/setup") {
-    // Allow staying on setup to finish business; don't auto-bounce.
+  if ((personalNeeded || needsOnboarding()) && !onSetup) {
+    return <Navigate to="/onboarding" replace state={{ from: location.pathname }} />;
   }
 
   return <Outlet />;

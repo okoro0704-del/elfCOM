@@ -73,7 +73,7 @@ export function UserLookupModal() {
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="$amara · Amara · harbor.hotel"
+          placeholder="$handle · name · domain"
           className="w-full rounded-2xl border border-line bg-panel px-4 py-3 outline-none ring-accent focus:ring-2"
         />
         {busy ? <p className="mt-3 text-xs text-mist">Searching directory…</p> : null}

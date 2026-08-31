@@ -29,6 +29,7 @@ export function Mailbox() {
   const accounts = useMailStore((s) => s.accounts);
   const activeAccountId = useMailStore((s) => s.activeAccountId);
   const setActiveAccount = useMailStore((s) => s.setActiveAccount);
+  const syncAccountsFromProfile = useMailStore((s) => s.syncAccountsFromProfile);
   const folder = useMailStore((s) => s.folder);
   const setFolder = useMailStore((s) => s.setFolder);
   const threads = useMailStore((s) => s.visibleThreads());
@@ -42,6 +43,18 @@ export function Mailbox() {
   useEffect(() => {
     if (trustId) useAccountStore.getState().hydrate(trustId);
   }, [trustId]);
+
+  useEffect(() => {
+    if (!context?.personal.setupComplete) return;
+    syncAccountsFromProfile({
+      personalHandle: context.personal.tidHandle,
+      personalName: context.personal.displayName,
+      businessDomain: context.business.setupComplete
+        ? context.business.businessDomain
+        : undefined,
+      businessName: context.business.displayName,
+    });
+  }, [context, syncAccountsFromProfile]);
 
   const selected = useMemo(
     () => threads.find((t) => t.id === selectedId) ?? null,
@@ -84,7 +97,8 @@ export function Mailbox() {
             activeMode={context.activeMode}
             onSwitch={(mode) => {
               switchMode(mode);
-              setActiveAccount(mode === "PERSONAL" ? "a-personal" : "a-biz");
+              const nextId = mode === "PERSONAL" ? "a-personal" : "a-biz";
+              if (accounts.some((a) => a.id === nextId)) setActiveAccount(nextId);
               if (needsSetup(mode)) navigate(`/setup/${mode.toLowerCase()}`);
             }}
           />
@@ -300,20 +314,17 @@ function Reader({
   onArchive: () => void;
   onDelete: () => void;
 }) {
-  const history = [
-    {
-      id: "h1",
-      from: thread.from,
-      html: `<p>${escapeHtml(thread.preview)}</p><p>Looking forward to your reply.</p>`,
-      at: thread.updatedAt,
-    },
-    {
-      id: "h0",
-      from: "you@elfcom",
-      html: `<p>Thanks — noted on our side.</p>`,
-      at: new Date(Date.parse(thread.updatedAt) - 3600_000).toISOString(),
-    },
-  ];
+  const history =
+    thread.bodies && thread.bodies.length > 0
+      ? thread.bodies.map((b, i) => ({ id: `b${i}`, ...b }))
+      : [
+          {
+            id: "h1",
+            from: thread.from,
+            html: `<p>${escapeHtml(thread.preview)}</p>`,
+            at: thread.updatedAt,
+          },
+        ];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

@@ -47,6 +47,10 @@ type OmniState = {
   omniMailFilter: string | "all";
   setOmniChatFilter: (f: SocialPlatform | "all") => void;
   setOmniMailFilter: (f: string | "all") => void;
+  connectPlatform: (platform: SocialPlatform, handle: string) => PlatformLink;
+  disconnectPlatform: (id: string) => void;
+  connectMailbox: (provider: MailProvider, address: string) => ExternalMailbox;
+  disconnectMailbox: (id: string) => void;
   omniChatUnread: () => number;
   omniMailUnread: () => number;
   visibleOmniChat: () => OmniChatItem[];
@@ -54,67 +58,73 @@ type OmniState = {
 };
 
 export const useOmniStore = create<OmniState>((set, get) => ({
-  platforms: [
-    { id: "wa", platform: "whatsapp", handle: "+15550001111", connected: true, lastSyncAt: new Date().toISOString() },
-    { id: "ig", platform: "instagram", handle: "@harbor.hotel", connected: true, lastSyncAt: new Date().toISOString() },
-    { id: "ms", platform: "messenger", handle: "Harbor Hotel", connected: false },
-    { id: "tg", platform: "telegram", handle: "@harbor_bot", connected: true, lastSyncAt: new Date().toISOString() },
-  ],
-  omniChat: [
-    {
-      id: "oc1",
-      platform: "whatsapp",
-      peer: "+15551234567",
-      preview: "Is late checkout possible?",
-      unread: 3,
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      id: "oc2",
-      platform: "instagram",
-      peer: "@traveler.maya",
-      preview: "Loved the rooftop photos!",
-      unread: 1,
-      updatedAt: new Date(Date.now() - 1200_000).toISOString(),
-    },
-    {
-      id: "oc3",
-      platform: "telegram",
-      peer: "Guest Bot",
-      preview: "Room service menu please",
-      unread: 0,
-      updatedAt: new Date(Date.now() - 7200_000).toISOString(),
-    },
-  ],
+  platforms: [],
+  omniChat: [],
   omniChatFilter: "all",
-  mailboxes: [
-    { id: "gm", provider: "gmail", address: "ops@gmail.com", connected: true, syncing: false },
-    { id: "ol", provider: "outlook", address: "ops@outlook.com", connected: true, syncing: true },
-    { id: "im", provider: "imap", address: "mail@custom.host", connected: false, syncing: false },
-  ],
-  omniMail: [
-    {
-      id: "om1",
-      mailboxId: "gm",
-      subject: "Supplier invoice #8821",
-      from: "billing@linen.co",
-      preview: "Payment due Friday.",
-      unread: true,
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      id: "om2",
-      mailboxId: "ol",
-      subject: "OTA rate plan update",
-      from: "partners@booking.example",
-      preview: "New weekend multipliers.",
-      unread: true,
-      updatedAt: new Date(Date.now() - 4000_000).toISOString(),
-    },
-  ],
+  mailboxes: [],
+  omniMail: [],
   omniMailFilter: "all",
   setOmniChatFilter: (f) => set({ omniChatFilter: f }),
   setOmniMailFilter: (f) => set({ omniMailFilter: f }),
+  connectPlatform: (platform, handle) => {
+    const trimmed = handle.trim();
+    if (!trimmed) throw new Error("Channel handle is required");
+    const existing = get().platforms.find((p) => p.platform === platform);
+    if (existing) {
+      const updated: PlatformLink = {
+        ...existing,
+        handle: trimmed,
+        connected: true,
+        lastSyncAt: new Date().toISOString(),
+      };
+      set((s) => ({
+        platforms: s.platforms.map((p) => (p.id === existing.id ? updated : p)),
+      }));
+      return updated;
+    }
+    const link: PlatformLink = {
+      id: `ch_${platform}_${Date.now()}`,
+      platform,
+      handle: trimmed,
+      connected: true,
+      lastSyncAt: new Date().toISOString(),
+    };
+    set((s) => ({ platforms: [...s.platforms, link] }));
+    return link;
+  },
+  disconnectPlatform: (id) =>
+    set((s) => ({
+      platforms: s.platforms.map((p) =>
+        p.id === id ? { ...p, connected: false, lastSyncAt: undefined } : p,
+      ),
+    })),
+  connectMailbox: (provider, address) => {
+    const addr = address.trim().toLowerCase();
+    if (!addr || !addr.includes("@")) throw new Error("Valid email address required");
+    const existing = get().mailboxes.find((m) => m.provider === provider && m.address === addr);
+    if (existing) {
+      const updated = { ...existing, connected: true, syncing: false };
+      set((s) => ({
+        mailboxes: s.mailboxes.map((m) => (m.id === existing.id ? updated : m)),
+      }));
+      return updated;
+    }
+    const box: ExternalMailbox = {
+      id: `mb_${provider}_${Date.now()}`,
+      provider,
+      address: addr,
+      connected: true,
+      syncing: false,
+    };
+    set((s) => ({ mailboxes: [...s.mailboxes, box] }));
+    return box;
+  },
+  disconnectMailbox: (id) =>
+    set((s) => ({
+      mailboxes: s.mailboxes.map((m) =>
+        m.id === id ? { ...m, connected: false, syncing: false } : m,
+      ),
+    })),
   omniChatUnread: () => get().omniChat.reduce((n, i) => n + i.unread, 0),
   omniMailUnread: () => get().omniMail.filter((i) => i.unread).length,
   visibleOmniChat: () => {

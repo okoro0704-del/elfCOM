@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { ProfileMode, ProfileSetupInput } from "@elfcom/core";
 import { useAccountStore } from "../../store/accountStore";
 import { useAuthStore } from "../../store/authStore";
+import { useOnboardingStore } from "../../store/onboardingStore";
 
 type Props = {
   /** When set, only this mode is edited (e.g. after switch). */
@@ -65,6 +66,10 @@ export function ProfileSetupPage({ forcedMode, onDone }: Props = {}) {
       };
       await completeSetup(mode, input);
       switchMode(mode);
+      if (mode === "PERSONAL" && trustId) {
+        useOnboardingStore.getState().hydrate(trustId);
+        useOnboardingStore.getState().mark("elfChat", true);
+      }
 
       if (forcedMode) {
         onDone?.();

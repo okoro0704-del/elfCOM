@@ -20,11 +20,13 @@ export type MailThread = {
   unread: boolean;
   starred: boolean;
   updatedAt: string;
+  /** Optional HTML / text bodies for the reader. */
+  bodies?: { from: string; html: string; at: string }[];
 };
 
 type MailState = {
   accounts: MailAccount[];
-  activeAccountId: string;
+  activeAccountId: string | null;
   folder: MailFolder;
   threads: MailThread[];
   composerOpen: boolean;
@@ -33,71 +35,56 @@ type MailState = {
   setFolder: (folder: MailFolder) => void;
   setComposerOpen: (open: boolean) => void;
   setFolderDrawerOpen: (open: boolean) => void;
+  syncAccountsFromProfile: (input: {
+    personalHandle: string;
+    personalName: string;
+    businessDomain?: string;
+    businessName?: string;
+  }) => void;
   unreadTotal: () => number;
   visibleThreads: () => MailThread[];
 };
 
 export const useMailStore = create<MailState>((set, get) => ({
-  accounts: [
-    {
-      id: "a-personal",
-      label: "Personal",
-      address: "you@elfcom/personal",
-      workspace: "personal",
-    },
-    {
-      id: "a-biz",
-      label: "Harbor Hotel",
-      address: "front.desk@harbor.hotel",
-      workspace: "business",
-    },
-  ],
-  activeAccountId: "a-personal",
+  accounts: [],
+  activeAccountId: null,
   folder: "inbox",
-  threads: [
-    {
-      id: "mt1",
-      accountId: "a-personal",
-      folder: "inbox",
-      subject: "Weekend itinerary",
-      from: "family@home.mail",
-      preview: "Flights land at 16:40 — pick-up?",
-      unread: true,
-      starred: false,
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      id: "mt2",
-      accountId: "a-biz",
-      folder: "inbox",
-      subject: "VIP arrival — suite upgrade",
-      from: "concierge@harbor.hotel",
-      preview: "Guest TD-SMOKE01 prefers ocean view.",
-      unread: true,
-      starred: true,
-      updatedAt: new Date(Date.now() - 1800_000).toISOString(),
-    },
-    {
-      id: "mt3",
-      accountId: "a-biz",
-      folder: "sent",
-      subject: "Confirmation: Spa booking",
-      from: "front.desk@harbor.hotel",
-      preview: "Your 14:00 slot is confirmed.",
-      unread: false,
-      starred: false,
-      updatedAt: new Date(Date.now() - 86400_000).toISOString(),
-    },
-  ],
+  threads: [],
   composerOpen: false,
   folderDrawerOpen: false,
   setActiveAccount: (id) => set({ activeAccountId: id }),
   setFolder: (folder) => set({ folder, folderDrawerOpen: false }),
   setComposerOpen: (open) => set({ composerOpen: open }),
   setFolderDrawerOpen: (open) => set({ folderDrawerOpen: open }),
+  syncAccountsFromProfile: (input) => {
+    const handle = input.personalHandle.replace(/^\$/, "").toLowerCase() || "me";
+    const personal: MailAccount = {
+      id: "a-personal",
+      label: input.personalName || "Personal",
+      address: `${handle}@elfcom.me`,
+      workspace: "personal",
+    };
+    const accounts: MailAccount[] = [personal];
+    if (input.businessDomain) {
+      const local = handle || "ops";
+      accounts.push({
+        id: "a-biz",
+        label: input.businessName || "Business",
+        address: `${local}@${input.businessDomain}`,
+        workspace: "business",
+      });
+    }
+    const active = get().activeAccountId;
+    set({
+      accounts,
+      activeAccountId:
+        active && accounts.some((a) => a.id === active) ? active : personal.id,
+    });
+  },
   unreadTotal: () => get().threads.filter((t) => t.unread && t.folder === "inbox").length,
   visibleThreads: () => {
     const { threads, activeAccountId, folder } = get();
+    if (!activeAccountId) return [];
     return threads.filter((t) => t.accountId === activeAccountId && t.folder === folder);
   },
 }));
