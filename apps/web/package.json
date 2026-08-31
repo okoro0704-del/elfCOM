@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "pack:netlify": "node ./scripts/pack-netlify-zip.mjs",
     "preview": "vite preview",
     "build:capacitor": "node ./scripts/build-capacitor.mjs",
     "cap:sync": "npm run build:capacitor && npx cap sync",
