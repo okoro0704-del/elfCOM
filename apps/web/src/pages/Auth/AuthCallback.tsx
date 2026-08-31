@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
 import { useAccountStore } from "../../store/accountStore";
 import { useOnboardingStore } from "../../store/onboardingStore";
+import { useMailStore } from "../../store/mailStore";
 import { trustIdCreateUrl } from "../../lib/trustidConfig";
 import { beginTrustIdLogin, resolveTrustIdSession } from "../../lib/trustidOAuth";
 
@@ -24,6 +25,7 @@ function exchangeOnce(code: string, state: string) {
 function postLoginPath(trustId: string): string {
   useAccountStore.getState().hydrate(trustId);
   useOnboardingStore.getState().hydrate(trustId);
+  useMailStore.getState().hydrate(trustId);
   const personalNeeded = useAccountStore.getState().needsSetup("PERSONAL");
   const onboardingNeeded = useOnboardingStore.getState().needsOnboarding();
   if (personalNeeded || onboardingNeeded) return "/onboarding";

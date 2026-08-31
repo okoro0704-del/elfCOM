@@ -3,13 +3,13 @@ import { create } from "zustand";
 const STORAGE_KEY = "elfcom.onboarding.v1";
 
 export type OnboardingFlags = {
-  /** ElfChat identity (personal profile) done */
+  /** ElfChat identity (personal profile) done — this alone finishes onboarding. */
   elfChat: boolean;
-  /** ElfMail address provisioned */
+  /** ElfMail address provisioned (optional). */
   elfMail: boolean;
-  /** At least one OmniChat channel connected, or explicitly skipped */
+  /** OmniChat channel connected or skipped (optional). */
   omniChat: boolean;
-  /** At least one OmniMail mailbox connected, or explicitly skipped */
+  /** OmniMail mailbox connected or skipped (optional). */
   omniMail: boolean;
 };
 
@@ -50,6 +50,7 @@ type OnboardingState = {
   flags: OnboardingFlags;
   hydrate: (ownerTrustId: string) => void;
   mark: (key: keyof OnboardingFlags, value?: boolean) => void;
+  /** ElfChat alone is enough to enter the app. */
   isComplete: () => boolean;
   needsOnboarding: () => boolean;
 };
@@ -67,9 +68,6 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     write(ownerTrustId, next);
     set({ flags: next });
   },
-  isComplete: () => {
-    const { flags } = get();
-    return flags.elfChat && flags.elfMail && flags.omniChat && flags.omniMail;
-  },
+  isComplete: () => Boolean(get().flags.elfChat),
   needsOnboarding: () => !get().isComplete(),
 }));

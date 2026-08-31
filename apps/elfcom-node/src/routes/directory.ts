@@ -22,7 +22,7 @@ export async function directoryRoutes(app: FastifyInstance) {
     await requireTrustIdOrCapability(req, reply, []);
     if (reply.sent) return;
 
-    const body = (req.body ?? {}) as Partial<DirUser>;
+    const body = (req.body ?? {}) as Partial<DirUser> & { mailLocal?: string };
     const mode = body.mode === "BUSINESS" ? "BUSINESS" : "PERSONAL";
     const displayName = String(body.displayName ?? "").trim();
     if (!displayName) {
@@ -51,12 +51,23 @@ export async function directoryRoutes(app: FastifyInstance) {
       }
     }
 
+    const username = String(body.username ?? "").trim().replace(/^@/, "") || undefined;
+    const email =
+      String(body.email ?? "").trim().toLowerCase() ||
+      (body.mailLocal
+        ? `${String(body.mailLocal).trim().toLowerCase()}@elfcom.me`
+        : undefined);
+    const phone = String(body.phone ?? "").trim().replace(/\s+/g, "") || undefined;
+
     const user = upsertDirectoryProfile({
       trustId,
       tidHandle,
       displayName,
       bio: String(body.bio ?? "").trim() || undefined,
       avatarUrl: (body.avatarUrl as string | null | undefined) ?? null,
+      username,
+      email,
+      phone,
       mode,
       businessDomain,
     });

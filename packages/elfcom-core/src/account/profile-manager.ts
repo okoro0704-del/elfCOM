@@ -71,7 +71,13 @@ export class ProfileManager {
       displayName: name,
       bio: (input.bio ?? "").trim(),
       avatarUrl: input.avatarUrl ?? null,
-      tidHandle: (input.tidHandle ?? "").trim() || (mode === "PERSONAL" ? this.ctx.personal.tidHandle : this.ctx.business.tidHandle),
+      tidHandle:
+        (input.tidHandle ?? "").trim() ||
+        (mode === "PERSONAL" ? this.ctx.personal.tidHandle : this.ctx.business.tidHandle),
+      username: (input.username ?? "").trim().replace(/^@/, "") || undefined,
+      email: (input.email ?? "").trim().toLowerCase() || undefined,
+      phone: (input.phone ?? "").trim().replace(/\s+/g, "") || undefined,
+      mailLocal: (input.mailLocal ?? "").trim().toLowerCase().replace(/[^a-z0-9._-]/g, "") || undefined,
       setupComplete: true,
     };
 

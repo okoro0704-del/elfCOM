@@ -6,6 +6,9 @@ export type DirUser = {
   displayName: string;
   bio?: string;
   avatarUrl?: string | null;
+  username?: string;
+  email?: string;
+  phone?: string;
   mode: "PERSONAL" | "BUSINESS";
   businessDomain?: string;
 };
@@ -23,21 +26,35 @@ export function upsertDirectoryProfile(user: DirUser): DirUser {
   return user;
 }
 
+function digits(s: string) {
+  return s.replace(/\D/g, "");
+}
+
 export function searchDirectoryUsers(query: string): DirUser[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
-  const needle = q.replace(/^\$/, "");
-  return listDirectoryUsers().filter(
-    (u) =>
+  const needle = q.replace(/^[@$]/, "");
+  const qDigits = digits(q);
+  return listDirectoryUsers().filter((u) => {
+    const phoneDigits = u.phone ? digits(u.phone) : "";
+    return (
       u.trustId.toLowerCase().includes(q) ||
       u.tidHandle.toLowerCase().includes(needle) ||
       u.displayName.toLowerCase().includes(q) ||
+      (u.username?.toLowerCase().includes(needle) ?? false) ||
+      (u.email?.toLowerCase().includes(q) ?? false) ||
+      (qDigits.length >= 3 && phoneDigits.includes(qDigits)) ||
       (u.businessDomain?.toLowerCase().includes(q) ?? false) ||
-      (u.bio?.toLowerCase().includes(q) ?? false),
-  );
+      (u.bio?.toLowerCase().includes(q) ?? false)
+    );
+  });
 }
 
 export function toDirectoryCard(u: DirUser) {
+  const addressHint =
+    u.mode === "BUSINESS" && u.businessDomain
+      ? `${(u.username || u.tidHandle).replace(/^[@$]/, "")}@${u.businessDomain}`
+      : u.email;
   return {
     ...u,
     actions: {
@@ -45,10 +62,7 @@ export function toDirectoryCard(u: DirUser) {
       sendMail: {
         kind: "mail" as const,
         targetTid: u.trustId,
-        addressHint:
-          u.mode === "BUSINESS" && u.businessDomain
-            ? `${u.tidHandle.replace(/^\$/, "")}@${u.businessDomain}`
-            : undefined,
+        addressHint,
       },
       call: { kind: "call" as const, targetTid: u.trustId },
     },

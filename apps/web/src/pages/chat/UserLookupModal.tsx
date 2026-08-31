@@ -6,6 +6,18 @@ import { useAuthStore } from "../../store/authStore";
 import { useChatStore } from "../../store/chatStore";
 import { useMailStore } from "../../store/mailStore";
 
+function peerMetaFromQuery(query: string) {
+  const q = query.trim();
+  if (q.includes("@") && !q.startsWith("@") && !q.startsWith("$")) {
+    return { email: q.toLowerCase(), displayName: q.split("@")[0] ?? q, handle: q };
+  }
+  if (/^\+?\d[\d\s()-]{6,}$/.test(q)) {
+    return { phone: q.replace(/\s+/g, ""), displayName: q, handle: q };
+  }
+  const uname = q.replace(/^[@$]/, "");
+  return { displayName: uname, handle: q.startsWith("$") || q.startsWith("@") ? q : `@${uname}` };
+}
+
 export function UserLookupModal() {
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<DirectoryUserCard[]>([]);
@@ -66,14 +78,12 @@ export function UserLookupModal() {
             Close
           </button>
         </div>
-        <p className="mb-3 text-sm text-mist">
-          Search by $TID handle, full name, or business identity.
-        </p>
+        <p className="mb-3 text-sm text-mist">Search by email, phone number, or username.</p>
         <input
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="$handle · name · domain"
+          placeholder="name@mail.com · +234… · @username"
           className="w-full rounded-2xl border border-line bg-panel px-4 py-3 outline-none ring-accent focus:ring-2"
         />
         {busy ? <p className="mt-3 text-xs text-mist">Searching directory…</p> : null}
@@ -82,10 +92,17 @@ export function UserLookupModal() {
         <div className="app-scroll mt-4 space-y-2 overflow-y-auto">
           {users.map((u) => (
             <UserDiscoveryCard
-              key={u.trustId}
+              key={`${u.trustId}:${u.mode}`}
               user={u}
               onStartChat={(tid) => {
-                startChatWith(tid);
+                startChatWith(tid, {
+                  id: tid,
+                  displayName: u.displayName,
+                  handle: u.username ? `@${u.username}` : u.tidHandle,
+                  email: u.email,
+                  phone: u.phone,
+                  presence: "offline",
+                });
                 setLookupOpen(false);
               }}
               onSendMail={() => {
@@ -104,7 +121,7 @@ export function UserLookupModal() {
           type="button"
           disabled={!query.trim()}
           onClick={() => {
-            startChatWith(query);
+            startChatWith(query, peerMetaFromQuery(query));
             setLookupOpen(false);
           }}
           className="mt-4 w-full rounded-2xl border border-line py-3 text-sm font-medium text-foam disabled:opacity-40"

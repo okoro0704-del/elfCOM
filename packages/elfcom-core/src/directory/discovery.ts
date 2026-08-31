@@ -19,10 +19,14 @@ function toCard(raw: Record<string, unknown>): DirectoryUserCard {
   const displayName = String(raw.displayName ?? raw.name ?? tidHandle);
   const businessDomain =
     typeof raw.businessDomain === "string" ? raw.businessDomain : undefined;
+  const username =
+    typeof raw.username === "string" ? raw.username.replace(/^@/, "") : undefined;
+  const email = typeof raw.email === "string" ? raw.email.toLowerCase() : undefined;
+  const phone = typeof raw.phone === "string" ? raw.phone : undefined;
   const addressHint =
     mode === "BUSINESS" && businessDomain
-      ? `${tidHandle.replace(/^\$/, "").split("@")[0] ?? "mail"}@${businessDomain}`
-      : undefined;
+      ? `${(username || tidHandle).replace(/^[@$]/, "").split("@")[0] ?? "mail"}@${businessDomain}`
+      : email;
 
   return {
     trustId,
@@ -30,6 +34,9 @@ function toCard(raw: Record<string, unknown>): DirectoryUserCard {
     displayName,
     bio: typeof raw.bio === "string" ? raw.bio : undefined,
     avatarUrl: (raw.avatarUrl as string | null | undefined) ?? null,
+    username,
+    email,
+    phone,
     mode,
     businessDomain,
     actions: {
@@ -104,6 +111,10 @@ export class DirectoryDiscovery {
         bio: profile.bio,
         avatarUrl: profile.avatarUrl,
         tidHandle: profile.tidHandle,
+        username: profile.username,
+        email: profile.email,
+        phone: profile.phone,
+        mailLocal: profile.mailLocal,
         businessDomain: profile.businessDomain,
       }),
       signal,

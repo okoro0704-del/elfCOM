@@ -27,8 +27,13 @@ export function UserDiscoveryCard({ user, onStartChat, onSendMail }: Props) {
             </span>
           </div>
           <p className="truncate text-xs text-mist">
-            {user.tidHandle.startsWith("$") ? user.tidHandle : `$${user.tidHandle}`} · {user.trustId}
+            {user.username ? `@${user.username}` : user.tidHandle} · {user.trustId}
           </p>
+          {user.email || user.phone ? (
+            <p className="mt-0.5 truncate text-xs text-mist">
+              {[user.email, user.phone].filter(Boolean).join(" · ")}
+            </p>
+          ) : null}
           {user.bio ? <p className="mt-1 line-clamp-2 text-sm text-mist">{user.bio}</p> : null}
         </div>
       </div>

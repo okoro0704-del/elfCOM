@@ -2,13 +2,12 @@ import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { initiateCall } from "@elfcom/webrtc";
 import { ProfileSwitcher } from "@elfcom/ui";
-import type { ProfileMode } from "@elfcom/core";
 import { useAccountStore } from "../../store/accountStore";
 import { useAuthStore } from "../../store/authStore";
 import { useMailStore, type MailFolder, type MailThread } from "../../store/mailStore";
 import { MailComposer } from "../mail/MailComposer";
 
-const folders: { id: MailFolder | "trash"; label: string }[] = [
+const folders: { id: MailFolder; label: string }[] = [
   { id: "inbox", label: "Inbox" },
   { id: "sent", label: "Sent" },
   { id: "drafts", label: "Drafts" },
@@ -16,8 +15,6 @@ const folders: { id: MailFolder | "trash"; label: string }[] = [
   { id: "spam", label: "Spam" },
   { id: "trash", label: "Trash" },
 ];
-
-const labels = ["VIP", "Reservations", "Billing", "Travel"];
 
 /** Gmail-standard ElfMailbox: sidebar + thread list + reader with call actions. */
 export function Mailbox() {
@@ -29,32 +26,37 @@ export function Mailbox() {
   const accounts = useMailStore((s) => s.accounts);
   const activeAccountId = useMailStore((s) => s.activeAccountId);
   const setActiveAccount = useMailStore((s) => s.setActiveAccount);
-  const syncAccountsFromProfile = useMailStore((s) => s.syncAccountsFromProfile);
+  const hydrateMail = useMailStore((s) => s.hydrate);
+  const createMailbox = useMailStore((s) => s.createMailbox);
   const folder = useMailStore((s) => s.folder);
   const setFolder = useMailStore((s) => s.setFolder);
   const threads = useMailStore((s) => s.visibleThreads());
   const setComposerOpen = useMailStore((s) => s.setComposerOpen);
   const composerOpen = useMailStore((s) => s.composerOpen);
+  const moveThread = useMailStore((s) => s.moveThread);
+  const toggleStar = useMailStore((s) => s.toggleStar);
+  const markRead = useMailStore((s) => s.markRead);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [starred, setStarred] = useState<Record<string, boolean>>({});
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [reply, setReply] = useState("");
+  const [setupLocal, setSetupLocal] = useState("");
+  const [setupError, setSetupError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (trustId) useAccountStore.getState().hydrate(trustId);
-  }, [trustId]);
+    if (trustId) {
+      useAccountStore.getState().hydrate(trustId);
+      hydrateMail(trustId);
+    }
+  }, [trustId, hydrateMail]);
 
   useEffect(() => {
-    if (!context?.personal.setupComplete) return;
-    syncAccountsFromProfile({
-      personalHandle: context.personal.tidHandle,
-      personalName: context.personal.displayName,
-      businessDomain: context.business.setupComplete
-        ? context.business.businessDomain
-        : undefined,
-      businessName: context.business.displayName,
-    });
-  }, [context, syncAccountsFromProfile]);
+    if (!context?.personal) return;
+    const hint =
+      context.personal.mailLocal ||
+      context.personal.username ||
+      context.personal.tidHandle.replace(/^[@$]/, "");
+    if (hint && !setupLocal) setSetupLocal(hint.toLowerCase().replace(/[^a-z0-9._-]/g, ""));
+  }, [context, setupLocal]);
 
   const selected = useMemo(
     () => threads.find((t) => t.id === selectedId) ?? null,
@@ -68,15 +70,53 @@ export function Mailbox() {
 
   const active = accounts.find((a) => a.id === activeAccountId);
 
-  const pickFolder = (id: MailFolder | "trash") => {
-    if (id === "trash") {
-      setFolder("archive");
-    } else {
-      setFolder(id);
-    }
+  const pickFolder = (id: MailFolder) => {
+    setFolder(id);
     setSelectedId(null);
     setSidebarOpen(false);
   };
+
+  const onCreateMailbox = () => {
+    setSetupError(null);
+    try {
+      createMailbox({
+        localPart: setupLocal,
+        displayName: context?.personal.displayName || setupLocal,
+      });
+    } catch (err) {
+      setSetupError(err instanceof Error ? err.message : "Could not create mailbox");
+    }
+  };
+
+  if (accounts.length === 0) {
+    return (
+      <div className="flex min-h-full flex-col items-center justify-center px-6 py-16 text-center">
+        <p className="font-display text-2xl font-semibold">Create your ElfMail</p>
+        <p className="mt-2 max-w-sm text-sm text-mist">
+          Pick an address the way you would on Gmail — then use Inbox, Sent, Drafts, and Compose.
+        </p>
+        <div className="mt-8 flex w-full max-w-sm items-center gap-1 rounded-2xl border border-line bg-panel px-3 py-2">
+          <input
+            value={setupLocal}
+            onChange={(e) =>
+              setSetupLocal(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ""))
+            }
+            placeholder="your.name"
+            className="min-w-0 flex-1 bg-transparent py-2 outline-none"
+          />
+          <span className="shrink-0 text-sm text-mist">@elfcom.me</span>
+        </div>
+        {setupError ? <p className="mt-3 text-sm text-danger">{setupError}</p> : null}
+        <button
+          type="button"
+          onClick={onCreateMailbox}
+          className="mt-6 rounded-2xl bg-accent px-6 py-3 text-sm font-semibold text-ink"
+        >
+          Create mailbox
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-full flex-col bg-ink">
@@ -148,7 +188,7 @@ export function Mailbox() {
                   onClick={() => pickFolder(f.id)}
                   className={[
                     "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm",
-                    folder === f.id || (f.id === "trash" && folder === "archive")
+                    folder === f.id
                       ? "bg-panel text-foam"
                       : "text-mist hover:bg-panel/50 hover:text-foam",
                   ].join(" ")}
@@ -157,19 +197,6 @@ export function Mailbox() {
                 </button>
               ))}
             </nav>
-            <div>
-              <p className="mb-1 px-3 text-[10px] uppercase tracking-wider text-mist">Labels</p>
-              <div className="flex flex-wrap gap-1.5 px-2">
-                {labels.map((l) => (
-                  <span
-                    key={l}
-                    className="rounded-full border border-line px-2 py-0.5 text-[10px] text-mist"
-                  >
-                    {l}
-                  </span>
-                ))}
-              </div>
-            </div>
           </div>
           <button
             type="button"
@@ -201,15 +228,20 @@ export function Mailbox() {
                 key={t.id}
                 thread={t}
                 active={t.id === selectedId}
-                starred={starred[t.id] ?? t.starred}
-                onOpen={() => setSelectedId(t.id)}
-                onToggleStar={() =>
-                  setStarred((s) => ({ ...s, [t.id]: !(s[t.id] ?? t.starred) }))
-                }
+                starred={t.starred}
+                onOpen={() => {
+                  setSelectedId(t.id);
+                  markRead(t.id, false);
+                }}
+                onToggleStar={() => toggleStar(t.id)}
               />
             ))}
             {sorted.length === 0 ? (
-              <li className="px-4 py-12 text-center text-sm text-mist">No messages in this folder.</li>
+              <li className="px-4 py-12 text-center text-sm text-mist">
+                {folder === "inbox"
+                  ? "Your inbox is empty. Compose a message to get started."
+                  : "No messages in this folder."}
+              </li>
             ) : null}
           </ul>
         </section>
@@ -223,10 +255,13 @@ export function Mailbox() {
               setReply={setReply}
               onBack={() => setSelectedId(null)}
               onArchive={() => {
-                setFolder("archive");
+                moveThread(selected.id, "archive");
                 setSelectedId(null);
               }}
-              onDelete={() => setSelectedId(null)}
+              onDelete={() => {
+                moveThread(selected.id, "trash");
+                setSelectedId(null);
+              }}
             />
           ) : (
             <div className="hidden flex-1 items-center justify-center text-sm text-mist md:flex">
