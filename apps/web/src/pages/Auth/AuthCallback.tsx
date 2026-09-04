@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 import { useAuthStore } from "../../store/authStore";
 import { useAccountStore } from "../../store/accountStore";
 import { useOnboardingStore } from "../../store/onboardingStore";
 import { useMailStore } from "../../store/mailStore";
 import { trustIdCreateUrl } from "../../lib/trustidConfig";
 import { beginTrustIdLogin, resolveTrustIdSession } from "../../lib/trustidOAuth";
+import { refreshPushRegistration } from "../../lib/pushBootstrap";
 
 /** Deduplicate one-time OAuth code exchange across React StrictMode remounts. */
 const exchangeByCode = new Map<
@@ -41,6 +44,15 @@ function isMissingTrustIdError(err: string | null, desc: string | null): boolean
   );
 }
 
+async function openCreateTrustId() {
+  const url = trustIdCreateUrl();
+  if (Capacitor.isNativePlatform()) {
+    await Browser.open({ url, toolbarColor: "#071f1e" });
+    return;
+  }
+  window.location.assign(url);
+}
+
 /** OAuth return — exchanges code, then enters ElfCom with zero chrome. */
 export function AuthCallback() {
   const [params] = useSearchParams();
@@ -49,6 +61,10 @@ export function AuthCallback() {
   const [error, setError] = useState<string | null>(null);
   const [needsCreate, setNeedsCreate] = useState(false);
   const started = useRef(false);
+
+  useEffect(() => {
+    void Browser.close().catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     const code = params.get("code");
@@ -61,7 +77,6 @@ export function AuthCallback() {
         setNeedsCreate(true);
         return;
       }
-      // Bounce silent failures back to login for retry / create.
       navigate(`/login?error=${encodeURIComponent(err)}`, { replace: true });
       return;
     }
@@ -77,6 +92,7 @@ export function AuthCallback() {
       try {
         const session = await exchangeOnce(code, state);
         setSession(session);
+        void refreshPushRegistration();
         const dest = postLoginPath(session.trustId);
         navigate(dest, { replace: true });
         window.setTimeout(() => {
@@ -98,17 +114,18 @@ export function AuthCallback() {
 
   if (needsCreate) {
     return (
-      <div className="flex min-h-dvh flex-col items-center justify-center bg-ink px-6 text-foam">
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-ink px-6 text-foam safe-pt safe-pb">
         <p className="font-display text-3xl font-semibold">ElfCom</p>
         <p className="mt-6 max-w-xs text-center text-sm text-mist">
           No Trust ID found. Create one, then return here to unlock with biometrics.
         </p>
-        <a
-          href={trustIdCreateUrl()}
+        <button
+          type="button"
+          onClick={() => void openCreateTrustId()}
           className="mt-8 text-sm font-semibold text-accent underline-offset-4 hover:underline"
         >
           Create Trust ID
-        </a>
+        </button>
         <button
           type="button"
           className="mt-4 text-xs text-mist"
@@ -121,7 +138,7 @@ export function AuthCallback() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-ink px-6 text-foam">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-ink px-6 text-foam safe-pt safe-pb">
       {error ? (
         <div className="w-full max-w-sm text-center">
           <p className="mb-4 text-sm text-danger" role="alert">

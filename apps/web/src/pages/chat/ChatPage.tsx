@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { TopAppBar } from "../../components/TopAppBar";
 import { useAuthStore } from "../../store/authStore";
 import { useAccountStore } from "../../store/accountStore";
@@ -17,6 +17,7 @@ function presenceDot(presence: string) {
 }
 
 export function ChatPage() {
+  const [params] = useSearchParams();
   const threads = useChatStore((s) => s.threads);
   const activeThreadId = useChatStore((s) => s.activeThreadId);
   const lookupOpen = useChatStore((s) => s.lookupOpen);
@@ -38,10 +39,17 @@ export function ChatPage() {
     if (trustId) useAccountStore.getState().hydrate(trustId);
   }, [trustId]);
 
+  useEffect(() => {
+    const thread = params.get("thread");
+    if (thread) setActiveThread(thread);
+  }, [params, setActiveThread]);
+
   const onSwitchMode = (mode: ProfileMode) => {
     switchMode(mode);
     if (needsSetup(mode)) navigate(`/setup/${mode.toLowerCase()}`);
   };
+
+  const online = typeof navigator === "undefined" ? true : navigator.onLine;
 
   return (
     <div className="flex min-h-full flex-col">
@@ -68,8 +76,14 @@ export function ChatPage() {
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 py-16 text-center">
           <p className="font-display text-lg font-semibold">No conversations yet</p>
           <p className="text-sm text-mist">
-            Find someone by $TID handle or name, then start an ElfChat thread.
+            Find people by email, phone, or username. Chats on this device stay private to your
+            session — stay online to send and receive live messages.
           </p>
+          {!online ? (
+            <p className="rounded-xl border border-line bg-panel px-3 py-2 text-xs text-accent">
+              You&apos;re offline. Reconnect to search the directory and sync.
+            </p>
+          ) : null}
           <button
             type="button"
             onClick={() => setLookupOpen(true)}

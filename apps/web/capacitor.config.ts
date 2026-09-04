@@ -31,6 +31,7 @@ const config: CapacitorConfig = {
     contentInset: "automatic",
     preferredContentMode: "mobile",
     backgroundColor: "#071f1e",
+    scheme: "com.elfcom.app",
   },
 };
 

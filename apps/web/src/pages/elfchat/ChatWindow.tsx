@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { initiateCall } from "@elfcom/webrtc";
+import { startCall } from "../../lib/calls";
 import { ProfileSwitcher } from "@elfcom/ui";
 import type { ProfileMode } from "@elfcom/core";
 import { useAccountStore } from "../../store/accountStore";
@@ -86,7 +86,7 @@ export function ChatWindow({ threadId, onBack }: Props) {
             aria-label="Voice call"
             className="rounded-xl border border-line px-2.5 py-2 text-mist hover:text-foam"
             onClick={() =>
-              initiateCall(thread.peer.id, "AUDIO", { displayName: thread.peer.displayName })
+              void startCall(thread.peer.id, "AUDIO", { displayName: thread.peer.displayName })
             }
           >
             <PhoneIcon />
@@ -97,7 +97,7 @@ export function ChatWindow({ threadId, onBack }: Props) {
             aria-label="Video call"
             className="rounded-xl border border-line px-2.5 py-2 text-mist hover:text-foam"
             onClick={() =>
-              initiateCall(thread.peer.id, "VIDEO", { displayName: thread.peer.displayName })
+              void startCall(thread.peer.id, "VIDEO", { displayName: thread.peer.displayName })
             }
           >
             <VideoIcon />

@@ -8,60 +8,48 @@
 | **Android** | Capacitor → `android/` (Android Studio / Play Store) |
 | **iOS** | Capacitor → `ios/` (Xcode on macOS / App Store) |
 
-App ID: `com.elfcom.app`
+App ID: `com.elfcom.app` · OAuth return: `com.elfcom.app://auth/callback`
 
 ## Prerequisites
 
 - **Android:** Android Studio (SDK 35+), JDK 21 recommended  
-- **iOS:** macOS + Xcode 16+ (cannot compile iOS on Windows)  
-- CocoaPods (iOS): `sudo gem install cocoapods`
+- **iOS:** macOS + Xcode 16+  
+- Firebase `google-services.json` for FCM (copy from `android/app/google-services.json.example`)
+- TrustID OAuth client must allow redirect URI `com.elfcom.app://auth/callback`
 
 ## Commands
 
 ```bash
-# Install + build web bundle + sync into native projects
 npm install
+# Ensure production API URLs (no VITE_ELFCOM_NODE_SECRET)
+cp apps/web/.env.production.example apps/web/.env.production
+
 npm run cap:sync -w @elfcom/web
-
-# Open native IDEs
-npm run android -w @elfcom/web   # Android Studio
-npm run ios -w @elfcom/web       # Xcode (macOS only)
+npm run android -w @elfcom/web   # Android Studio → Run or Generate Signed APK
 ```
 
-After UI changes:
+## Release signing (Android)
 
 ```bash
-npm run cap:sync -w @elfcom/web
+cd apps/web/android
+keytool -genkey -v -keystore elfcom-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias elfcom
+cp keystore.properties.example keystore.properties
+# edit passwords, then:
+./gradlew :app:assembleRelease
+# APK: app/build/outputs/apk/release/app-release.apk
 ```
 
-Then run the app from Android Studio / Xcode (Run ▶).
+## Push notifications
 
-## First-time platform folders
+1. Create Firebase Android app `com.elfcom.app`
+2. Drop `google-services.json` into `apps/web/android/app/`
+3. Set Railway `FIREBASE_SERVICE_ACCOUNT_JSON` + `ELFCOM_PUSH_DRY_RUN=false`
+4. After login the app calls `POST /v1/devices/register` with `appId=elfcom_android`
 
-If `android/` or `ios/` are missing:
+## App Links
 
-```bash
-cd apps/web
-npx cap add android
-npx cap add ios    # prefer on a Mac
-npm run cap:sync
-```
+`public/.well-known/assetlinks.json` must list your release keystore SHA-256 fingerprint, then redeploy Netlify.
 
-## API URL on device
+## Permissions
 
-Emulator/device cannot use `localhost` for your Railway API. Set at build time:
-
-```bash
-# apps/web/.env.production (example)
-VITE_ELFCOM_BASE_URL=https://elfcomnode-production.up.railway.app
-VITE_ELFCOM_NODE_SECRET=elfcom-dev-node-secret-change-me
-```
-
-Then `npm run cap:sync -w @elfcom/web`.
-
-## Store releases
-
-- **Play Store:** Android Studio → Build → Generate Signed App Bundle  
-- **App Store:** Xcode → Product → Archive → Distribute App  
-
-Bump version in `android/app/build.gradle` and `ios/App/App.xcodeproj` as needed.
+Android/iOS request camera, mic, and notifications for calls and push.

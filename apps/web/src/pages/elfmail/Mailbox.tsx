@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { initiateCall } from "@elfcom/webrtc";
+import { startCall } from "../../lib/calls";
 import { ProfileSwitcher } from "@elfcom/ui";
 import { useAccountStore } from "../../store/accountStore";
 import { useAuthStore } from "../../store/authStore";
@@ -239,7 +239,7 @@ export function Mailbox() {
             {sorted.length === 0 ? (
               <li className="px-4 py-12 text-center text-sm text-mist">
                 {folder === "inbox"
-                  ? "Your inbox is empty. Compose a message to get started."
+                  ? "Your inbox is empty. Compose a message to get started. Mail on this device is stored locally until you reconnect."
                   : "No messages in this folder."}
               </li>
             ) : null}
@@ -373,11 +373,11 @@ function Reader({
         <div className="mt-2 flex flex-wrap gap-1.5">
           <ActionBtn
             label="Voice Call"
-            onClick={() => initiateCall(thread.from, "AUDIO")}
+            onClick={() => void startCall(thread.from, "AUDIO")}
           />
           <ActionBtn
             label="Video Call"
-            onClick={() => initiateCall(thread.from, "VIDEO")}
+            onClick={() => void startCall(thread.from, "VIDEO")}
           />
           <ActionBtn label="Reply" onClick={() => document.getElementById("elfmail-reply")?.focus()} />
           <ActionBtn label="Archive" onClick={onArchive} />

@@ -1,11 +1,14 @@
 /**
  * Service-to-service BaaS API keys for cross-primitive notify.
  *
- * Env ELFCOM_BAAS_API_KEYS:
- *   appId:secret,appId2:secret2
+ * Env ELFCOM_BAAS_API_KEYS (comma-separated):
+ *   appId:plaintextSecret
+ *   appId:sha256=<hex>          ← preferred (store hash only)
+ *   tenantId/appId:sha256=<hex>
+ *
  * Header:
- *   X-ElfCom-Api-Key: <secret>
- *   or Authorization: Bearer elfcom_baas_<secret>
+ *   X-ElfCom-Api-Key: <plaintext secret>
+ *   or Authorization: Bearer elfcom_baas_<plaintext secret>
  */
 import { timingSafeEqual, createHash } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -16,40 +19,57 @@ export type BaasPrincipal = {
   tenantId?: string;
 };
 
+type KeyEntry = BaasPrincipal & {
+  /** sha256 hex of the plaintext secret */
+  secretHash: string;
+};
+
 declare module "fastify" {
   interface FastifyRequest {
     baasAuth?: BaasPrincipal;
   }
 }
 
-function parseKeyMap(): Map<string, { appId: string; tenantId?: string }> {
-  const map = new Map<string, { appId: string; tenantId?: string }>();
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function parseKeyEntries(): KeyEntry[] {
+  const entries: KeyEntry[] = [];
   for (const part of config.baasApiKeys) {
-    // Formats:
-    //   appId:secret
-    //   tenantId/appId:secret
     const idx = part.lastIndexOf(":");
     if (idx <= 0) continue;
     const left = part.slice(0, idx).trim();
-    const secret = part.slice(idx + 1).trim();
-    if (!left || !secret) continue;
+    const right = part.slice(idx + 1).trim();
+    if (!left || !right) continue;
+
+    let tenantId: string | undefined;
+    let appId = left;
     const slash = left.indexOf("/");
     if (slash > 0) {
-      map.set(secret, {
-        tenantId: left.slice(0, slash),
-        appId: left.slice(slash + 1),
-      });
-    } else {
-      map.set(secret, { appId: left });
+      tenantId = left.slice(0, slash);
+      appId = left.slice(slash + 1);
     }
+
+    const secretHash = right.toLowerCase().startsWith("sha256=")
+      ? right.slice("sha256=".length).trim().toLowerCase()
+      : sha256Hex(right);
+
+    if (!/^[a-f0-9]{64}$/.test(secretHash)) continue;
+    entries.push({ appId, tenantId, secretHash });
   }
-  return map;
+  return entries;
 }
 
-function safeEqual(a: string, b: string): boolean {
-  const ha = createHash("sha256").update(a).digest();
-  const hb = createHash("sha256").update(b).digest();
-  return timingSafeEqual(ha, hb);
+function hashesEqual(a: string, b: string): boolean {
+  try {
+    const ba = Buffer.from(a, "hex");
+    const bb = Buffer.from(b, "hex");
+    if (ba.length !== bb.length) return false;
+    return timingSafeEqual(ba, bb);
+  } catch {
+    return false;
+  }
 }
 
 export function extractBaasApiKey(req: FastifyRequest): string | null {
@@ -66,17 +86,15 @@ export function extractBaasApiKey(req: FastifyRequest): string | null {
 
 /** Verify API key; returns principal or null. */
 export function verifyBaasApiKey(secret: string): BaasPrincipal | null {
-  const map = parseKeyMap();
-  for (const [known, principal] of map) {
-    if (safeEqual(known, secret)) return principal;
+  const presented = sha256Hex(secret);
+  for (const entry of parseKeyEntries()) {
+    if (hashesEqual(entry.secretHash, presented)) {
+      return { appId: entry.appId, tenantId: entry.tenantId };
+    }
   }
   return null;
 }
 
-/**
- * Prefer BaaS API key. On success sets req.baasAuth.
- * Returns true if authenticated via API key.
- */
 export function tryBaasApiKeyAuth(req: FastifyRequest): boolean {
   const secret = extractBaasApiKey(req);
   if (!secret) return false;

@@ -2,6 +2,8 @@
  * TrustID production endpoints for ElfCom (cross-origin OAuth + API).
  * Passkeys live on trustedid.netlify.app — silent login redirects there with ui_mode=silent.
  */
+import { Capacitor } from "@capacitor/core";
+
 export const TRUST_ID_AUTH = {
   /** Railway TrustID API (CORS allows ElfCom). */
   apiBaseUrl: (
@@ -17,6 +19,10 @@ export const TRUST_ID_AUTH = {
     "openid identity.basic identity.zk_claims identity.trust_level identity.verification_status",
   silentAssertPath: "/v1/auth/silent-assert",
 } as const;
+
+/** Custom URL scheme registered in AndroidManifest / Info.plist. */
+export const NATIVE_OAUTH_REDIRECT = "com.elfcom.app://auth/callback";
+export const WEB_OAUTH_REDIRECT = "https://elfcom.netlify.app/auth/callback";
 
 const ENROLLED_KEY = "elfcom.trustid.enrolled";
 
@@ -45,16 +51,36 @@ export function clearTrustIdOnDevice(): void {
   }
 }
 
+/**
+ * OAuth redirect_uri.
+ * Native APK uses custom scheme so Capacitor Browser can return into the app
+ * without relying on sessionStorage across WebView hops.
+ */
 export function trustIdCallbackUri(): string {
-  if (typeof window === "undefined") return "https://elfcom.netlify.app/auth/callback";
-  return `${window.location.origin}/auth/callback`;
+  if (typeof window === "undefined") return WEB_OAUTH_REDIRECT;
+  if (Capacitor.isNativePlatform()) {
+    return (
+      import.meta.env.VITE_TRUSTID_NATIVE_REDIRECT?.trim() || NATIVE_OAUTH_REDIRECT
+    );
+  }
+  // Prefer stable production callback when served from file:// or capacitor host.
+  if (window.location.protocol === "https:" || window.location.protocol === "http:") {
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      return `${window.location.origin}/auth/callback`;
+    }
+    return `${window.location.origin}/auth/callback`;
+  }
+  return WEB_OAUTH_REDIRECT;
 }
 
 /** Open TrustID to create an identity (first-time users). */
 export function trustIdCreateUrl(): string {
   const u = new URL(TRUST_ID_AUTH.webOrigin);
   u.searchParams.set("intent", "create");
-  u.searchParams.set("return_to", trustIdCallbackUri().replace(/\/auth\/callback$/, "/login"));
+  const returnTo = Capacitor.isNativePlatform()
+    ? "com.elfcom.app://login"
+    : trustIdCallbackUri().replace(/\/auth\/callback$/, "/login");
+  u.searchParams.set("return_to", returnTo);
   u.searchParams.set("app", "ElfCom");
   return u.toString();
 }

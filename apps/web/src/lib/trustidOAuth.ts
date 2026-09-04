@@ -1,10 +1,11 @@
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 import {
   TRUST_ID_AUTH,
   trustIdCallbackUri,
   markTrustIdOnDevice,
 } from "./trustidConfig";
-
-const OAUTH_KEY = "elfcom.trustid.oauth";
+import { clearOAuthState, loadOAuthState, saveOAuthState } from "./oauthStorage";
 
 function b64url(bytes: ArrayBuffer | Uint8Array) {
   const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -51,8 +52,8 @@ export type BeginLoginOpts = {
 
 /**
  * Start TrustID OAuth + PKCE.
- * Silent mode: TrustID shows no chrome — only the OS biometric sheet when a
- * passkey exists. First-time users without a TrustID are sent to create one.
+ * Native: opens Capacitor Browser and returns via custom-scheme deep link.
+ * Web: full-page redirect.
  */
 export async function beginTrustIdLogin(opts?: BeginLoginOpts) {
   const silent = opts?.silent !== false;
@@ -61,10 +62,13 @@ export async function beginTrustIdLogin(opts?: BeginLoginOpts) {
   const state = randomString(24);
   const redirect = trustIdCallbackUri();
 
-  sessionStorage.setItem(
-    OAUTH_KEY,
-    JSON.stringify({ verifier, state, redirect, startedAt: Date.now(), silent }),
-  );
+  await saveOAuthState({
+    verifier,
+    state,
+    redirect,
+    startedAt: Date.now(),
+    silent,
+  });
 
   const url = new URL(`${TRUST_ID_AUTH.apiBaseUrl}/oauth/authorize`);
   url.searchParams.set("client_id", TRUST_ID_AUTH.clientId);
@@ -81,6 +85,15 @@ export async function beginTrustIdLogin(opts?: BeginLoginOpts) {
     url.searchParams.set("prompt", "none");
   }
 
+  if (Capacitor.isNativePlatform()) {
+    await Browser.open({
+      url: url.toString(),
+      presentationStyle: "popover",
+      toolbarColor: "#071f1e",
+    });
+    return;
+  }
+
   window.location.assign(url.toString());
 }
 
@@ -92,9 +105,8 @@ export type TrustIdTokenResponse = {
 };
 
 export async function exchangeTrustIdCode(code: string, state: string): Promise<TrustIdTokenResponse> {
-  const raw = sessionStorage.getItem(OAUTH_KEY);
-  if (!raw) throw new Error("Missing TrustID login state — try again");
-  const saved = JSON.parse(raw) as { verifier: string; state: string; redirect: string };
+  const saved = await loadOAuthState();
+  if (!saved) throw new Error("Missing TrustID login state — try again");
   if (saved.state !== state) throw new Error("TrustID login state mismatch");
 
   const controller = new AbortController();
@@ -121,7 +133,7 @@ export async function exchangeTrustIdCode(code: string, state: string): Promise<
       throw new Error(data.message || data.error || `Token exchange failed (${res.status})`);
     }
     if (!data.access_token) throw new Error("TrustID returned no access token");
-    sessionStorage.removeItem(OAUTH_KEY);
+    await clearOAuthState();
     return data;
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {

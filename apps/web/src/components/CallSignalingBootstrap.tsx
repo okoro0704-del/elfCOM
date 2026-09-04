@@ -1,8 +1,9 @@
 import { useEffect } from "react";
 import { configureCallSignaling } from "@elfcom/webrtc";
 import { useAuthStore } from "../store/authStore";
+import { refreshPushRegistration } from "../lib/pushBootstrap";
 
-/** Keep WebRTC signaling socket alive while authenticated. */
+/** Keep WebRTC signaling + push registration alive while authenticated. */
 export function CallSignalingBootstrap() {
   const accessToken = useAuthStore((s) => s.session?.accessToken);
   const trustId = useAuthStore((s) => s.session?.trustId);
@@ -18,6 +19,7 @@ export function CallSignalingBootstrap() {
       selfTid: trustId,
       getAccessToken: () => useAuthStore.getState().session?.accessToken,
     });
+    void refreshPushRegistration();
     return () => configureCallSignaling(null);
   }, [accessToken, trustId]);
 

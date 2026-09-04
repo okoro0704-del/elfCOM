@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 import {
   hasTrustIdOnDevice,
   trustIdCreateUrl,
@@ -7,6 +9,14 @@ import { beginTrustIdLogin } from "../../lib/trustidOAuth";
 
 type Phase = "unlocking" | "needs_trustid" | "retry";
 
+async function openExternal(url: string) {
+  if (Capacitor.isNativePlatform()) {
+    await Browser.open({ url, toolbarColor: "#071f1e" });
+    return;
+  }
+  window.location.assign(url);
+}
+
 /**
  * Zero-input ElfCom login.
  * - Known device: immediately silent TrustID passkey (Face ID / fingerprint).
@@ -14,7 +24,21 @@ type Phase = "unlocking" | "needs_trustid" | "retry";
  */
 export function Login() {
   const [phase, setPhase] = useState<Phase>("unlocking");
+  const [online, setOnline] = useState(
+    typeof navigator === "undefined" ? true : navigator.onLine,
+  );
   const started = useRef(false);
+
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
 
   useEffect(() => {
     if (started.current) return;
@@ -24,7 +48,6 @@ export function Login() {
     const err = params.get("error");
     const errDesc = params.get("error_description") || err;
 
-    // Returned from silent authorize with no passkey / no account.
     if (
       err === "login_required" ||
       err === "interaction_required" ||
@@ -36,9 +59,13 @@ export function Login() {
       return;
     }
 
-    // Returning from TrustID create — try silent unlock.
     if (params.get("created") === "1" || params.get("enrolled") === "1") {
       window.history.replaceState({}, "", "/login");
+    }
+
+    if (!navigator.onLine) {
+      setPhase(hasTrustIdOnDevice() ? "retry" : "needs_trustid");
+      return;
     }
 
     void (async () => {
@@ -57,7 +84,7 @@ export function Login() {
 
   return (
     <div
-      className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-ink text-foam"
+      className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-ink text-foam safe-pt safe-pb"
       onClick={phase === "retry" ? unlock : undefined}
       role={phase === "retry" ? "button" : undefined}
     >
@@ -73,7 +100,13 @@ export function Login() {
       <div className="relative z-10 flex flex-col items-center px-8 text-center">
         <p className="font-display text-5xl font-semibold tracking-tight text-foam">ElfCom</p>
 
-        {phase === "unlocking" ? (
+        {!online ? (
+          <p className="mt-6 max-w-xs text-sm text-accent">
+            Offline — connect to the internet to unlock with Trust ID.
+          </p>
+        ) : null}
+
+        {phase === "unlocking" && online ? (
           <p className="mt-8 text-sm text-mist animate-pulse">Looking for your Trust ID…</p>
         ) : null}
 
@@ -82,12 +115,16 @@ export function Login() {
             <p className="max-w-xs text-sm leading-relaxed text-mist">
               No Trust ID on this device. Create one to unlock ElfCom with Face ID or fingerprint.
             </p>
-            <a
-              href={trustIdCreateUrl()}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void openExternal(trustIdCreateUrl());
+              }}
               className="text-sm font-semibold text-accent underline-offset-4 hover:underline"
             >
               Create Trust ID
-            </a>
+            </button>
             <button
               type="button"
               onClick={(e) => {
@@ -101,7 +138,7 @@ export function Login() {
           </div>
         ) : null}
 
-        {phase === "retry" ? (
+        {phase === "retry" && online ? (
           <p className="mt-8 max-w-xs text-sm text-mist">
             Tap anywhere to unlock with Face ID or fingerprint
           </p>
