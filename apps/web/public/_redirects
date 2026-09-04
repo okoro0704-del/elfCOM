@@ -1,0 +1,5 @@
+# Keep Digital Asset Links / ACME challenges as static files
+/.well-known/*  /.well-known/:splat  200
+
+# SPA fallback
+/*    /index.html   200
