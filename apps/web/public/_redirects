@@ -1,5 +1,5 @@
-# Keep Digital Asset Links / ACME challenges as static files
-/.well-known/*  /.well-known/:splat  200
+# Digital Asset Links (Android App Links) — keep out of SPA fallback
+/.well-known/assetlinks.json  /assetlinks.json  200
 
 # SPA fallback
 /*    /index.html   200
