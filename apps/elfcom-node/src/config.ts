@@ -35,4 +35,24 @@ export const config = {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),
+
+  /** Push notification engine */
+  pushDryRun:
+    (process.env.ELFCOM_PUSH_DRY_RUN ??
+      ((process.env.NODE_ENV ?? "development") !== "production" ? "true" : "false"))
+      .toLowerCase() !== "false",
+  /** appId:secret or tenantId/appId:secret, comma-separated */
+  baasApiKeys: (process.env.ELFCOM_BAAS_API_KEYS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+  firebaseServiceAccountJson: process.env.FIREBASE_SERVICE_ACCOUNT_JSON ?? "",
+  apnsKeyId: process.env.APNS_KEY_ID ?? "",
+  apnsTeamId: process.env.APNS_TEAM_ID ?? "",
+  apnsBundleId: process.env.APNS_BUNDLE_ID ?? "",
+  apnsPrivateKey: process.env.APNS_PRIVATE_KEY ?? "",
+  apnsProduction: (process.env.APNS_PRODUCTION ?? "false").toLowerCase() === "true",
+  vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? "",
+  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? "",
+  vapidSubject: process.env.VAPID_SUBJECT ?? "mailto:ops@elfcom.me",
 };
