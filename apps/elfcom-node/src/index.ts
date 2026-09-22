@@ -59,6 +59,11 @@ app.get("/health", async () => ({
   nodeId: "elfcom",
   bound: true,
   phase: "E",
+  commit:
+    process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 12) ||
+    process.env.ELFCOM_GIT_COMMIT?.slice(0, 12) ||
+    null,
+  authorityEnforcement: true,
   pillars: [
     "engine",
     "omnichannel",
@@ -68,6 +73,7 @@ app.get("/health", async () => ({
     "calls",
     "directory",
     "notify",
+    "digi-authority",
   ],
   connectors: registry.enabledChannels(),
   trustIdJwks: Boolean(config.trustIdJwksUrl),

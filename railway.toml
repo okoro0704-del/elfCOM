@@ -1,19 +1,15 @@
-# Railway / Railpack — ElfCom API only (@elfcom/node)
-# Do NOT set the service to @elfcom/lifeos-adapter — that is a client library for LifeOS.
-#
-# Required env:
-#   LIFEOS_JWT_SECRET=...
-#   ELFCOM_NODE_MASTER_KEY=...
-#   CORS_ORIGINS=https://your-console.netlify.app
-#   HOST=0.0.0.0
-# Optional: DATABASE_URL, PORT (Railway sets PORT)
+# Railway — ElfCom API only (@elfcom/node)
+# Dockerfile.elfcom-node avoids Railpack omitting prisma/schema at runtime
+# (start:migrate failed with: Could not load --schema from prisma/schema.prisma).
 
 [build]
-builder = "RAILPACK"
-buildCommand = "npm run build --workspace=@elfcom/node"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.elfcom-node"
 
 [deploy]
-startCommand = "npm run start:migrate --workspace=@elfcom/node"
+# CMD is in Dockerfile (prisma db push + node). Leave empty to use image CMD,
+# or override with the same safe path:
+startCommand = "sh -c 'npx prisma db push --schema=./prisma/schema.prisma --skip-generate && node dist/index.js'"
 restartPolicyType = "ON_FAILURE"
 healthcheckPath = "/health"
-healthcheckTimeout = 30
+healthcheckTimeout = 100

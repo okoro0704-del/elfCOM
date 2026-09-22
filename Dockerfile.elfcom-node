@@ -1,0 +1,27 @@
+# Production image for @elfcom/node (Phase T4.1)
+# Root cause fixed: Railpack runtime omitted prisma/schema.prisma while
+# start:migrate required it ? crash loop; stale 2026-09-04 build stayed live.
+FROM node:20-alpine AS build
+WORKDIR /repo
+COPY package.json package-lock.json ./
+COPY apps ./apps
+COPY packages ./packages
+COPY adapters ./adapters
+RUN npm config set fetch-retries 5 \
+  && npm config set fetch-retry-mintimeout 20000 \
+  && npm config set fetch-retry-maxtimeout 120000 \
+  && npm ci \
+  && npm run build --workspace=@elfcom/node
+
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production \
+    HOST=0.0.0.0
+RUN apk add --no-cache wget
+COPY --from=build /repo /app
+WORKDIR /app/apps/elfcom-node
+EXPOSE 8791
+HEALTHCHECK --interval=20s --timeout=5s --start-period=45s --retries=6 \
+  CMD wget -qO- http://127.0.0.1:${PORT:-8791}/health >/dev/null || exit 1
+# Non-destructive db push (no wipe). Schema is present in this WORKDIR.
+CMD ["sh", "-c", "npx prisma db push --schema=./prisma/schema.prisma --skip-generate && node dist/index.js"]
