@@ -30,6 +30,15 @@ export const config = {
   trustIdJwksUrl: process.env.TRUSTID_JWKS_URL ?? "",
   trustIdIssuer: process.env.TRUSTID_ISSUER ?? "",
   trustIdAudience: process.env.TRUSTID_AUDIENCE ?? "elfcom",
+  /** Digi authority JWKS (capability verification — not TrustID). */
+  digiAuthorityJwksUrl:
+    process.env.DIGI_AUTHORITY_JWKS_URL ??
+    (process.env.DIGI_RP_URL
+      ? `${process.env.DIGI_RP_URL.replace(/\/$/, "")}/.well-known/authority-jwks.json`
+      : ""),
+  /** Digi consume endpoint base (Option A replay/limits). */
+  digiAuthorityConsumeUrl:
+    process.env.DIGI_AUTHORITY_CONSUME_URL ?? process.env.DIGI_RP_URL ?? "",
   /** Comma-separated browser origins allowed to call the API (Netlify console, etc.). */
   corsOrigins: (process.env.CORS_ORIGINS ?? process.env.ELFCOM_CORS_ORIGINS ?? "")
     .split(",")

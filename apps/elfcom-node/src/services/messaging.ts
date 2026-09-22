@@ -803,6 +803,139 @@ export class MessagingService {
   }
 
   /**
+   * Digi-authority delegated send (Phase T4).
+   * Owner = TrustID subject from verified capability; performedBy = Digi actor.
+   * Does not require Phase-A session bind (automation path).
+   */
+  async sendDelegatedAuthorityMessage(input: {
+    ownerTrustId: string;
+    digiOwnerId: string;
+    actor: string;
+    threadId: string;
+    body: string;
+    peerRef?: string;
+    grantId: string;
+    jti: string;
+    correlationId: string;
+    actionId: string;
+  }): Promise<{ id: string; threadId: string; createdAt: string }> {
+    const owner = input.ownerTrustId;
+    if (!owner) throw new Error("missing_owner_trust_id");
+    const uk = this.userKey(owner);
+    let thread = this.store.getThread(owner, input.threadId);
+    if (!thread) {
+      const titleCreatedAt = new Date().toISOString();
+      const titleAadFields: SealAad = {
+        ownerTrustId: owner,
+        threadId: input.threadId,
+        messageId: `${input.threadId}:title`,
+        channel: "dm",
+        createdAt: titleCreatedAt,
+      };
+      const titleCipher = seal(
+        input.peerRef ? `DM ${input.peerRef}` : "Delegated message",
+        uk,
+        titleAadFields,
+        `user:${owner}`,
+      );
+      thread = this.store.ensureThread({
+        id: input.threadId,
+        ownerTrustId: owner,
+        titleCipher,
+        titleCreatedAt,
+        titleSealMode: "user",
+        channel: "dm",
+        peerRef: input.peerRef,
+        participants: input.peerRef ? [owner, input.peerRef] : [owner],
+      });
+      void persistThread({
+        id: thread.id,
+        ownerTrustId: thread.ownerTrustId,
+        channel: thread.channel,
+        peerRef: thread.peerRef,
+        titleCipher: thread.titleCipher,
+        titleCreatedAt: thread.titleCreatedAt,
+        titleSealMode: thread.titleSealMode,
+        peerHandleCipher: thread.peerHandleCipher,
+        participants: thread.participants,
+        unreadCount: thread.unreadCount,
+      });
+    }
+
+    const messageId = randomUUID();
+    const createdAt = new Date().toISOString();
+    const aad: SealAad = {
+      ownerTrustId: owner,
+      threadId: thread.id,
+      messageId,
+      channel: thread.channel,
+      createdAt,
+    };
+    const bodyCipher = seal(input.body, uk, aad, `user:${owner}`);
+
+    this.store.appendMessage({
+      id: messageId,
+      threadId: thread.id,
+      ownerTrustId: owner,
+      senderId: owner,
+      channel: thread.channel,
+      createdAt,
+      bodyCipher,
+      sealMode: "user",
+      direction: "outbound",
+    });
+
+    void persistMessage({
+      id: messageId,
+      threadId: thread.id,
+      ownerTrustId: owner,
+      senderId: owner,
+      channel: thread.channel,
+      direction: "outbound",
+      sealMode: "user",
+      bodyCipher,
+      createdAt,
+    });
+
+    webSocketService.emit({
+      typ: "message.created",
+      userId: owner,
+      threadId: thread.id,
+      messageId,
+      channel: "dm",
+      ts: createdAt,
+      meta: {
+        direction: "outbound",
+        performedBy: input.actor,
+        digiOwnerId: input.digiOwnerId,
+        grantId: input.grantId,
+        jti: input.jti,
+        correlationId: input.correlationId,
+        actionId: input.actionId,
+      },
+    });
+    webSocketService.emit({
+      typ: "thread.updated",
+      userId: owner,
+      threadId: thread.id,
+      channel: "dm",
+      ts: createdAt,
+    });
+
+    if (input.peerRef && input.peerRef !== owner) {
+      this.mirrorNativeDmToPeer({
+        fromTrustId: owner,
+        peerTrustId: input.peerRef,
+        body: input.body,
+        messageId,
+        createdAt,
+      });
+    }
+
+    return { id: messageId, threadId: thread.id, createdAt };
+  }
+
+  /**
    * Deliver a native DM into the peer's owner-scoped inbox and emit realtime events to them.
    * Peer thread id: `dm:{peer}:{from}` — separate from sender's `dm:{from}:{peer}`.
    */

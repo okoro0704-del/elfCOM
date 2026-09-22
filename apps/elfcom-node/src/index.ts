@@ -8,6 +8,7 @@ import { webhookRoutes } from "./routes/webhooks.js";
 import { directoryRoutes } from "./routes/directory.js";
 import { callRoutes } from "./routes/calls.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
+import { authorityRoutes, getAuthorityMetrics } from "./routes/authority.js";
 import { messagingService } from "./services/messaging.js";
 import { persistenceEnabled } from "./persistence/postgres.js";
 import { apnsConfigured } from "./services/providers/apns.provider.js";
@@ -25,7 +26,12 @@ await app.register(cors, {
         ? true
         : config.corsOrigins,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Authorization", "Content-Type", "X-ElfCom-Api-Key"],
+  allowedHeaders: [
+    "Authorization",
+    "Content-Type",
+    "X-ElfCom-Api-Key",
+    "Idempotency-Key",
+  ],
 });
 
 const registry = createConnectorRegistry({
@@ -65,6 +71,12 @@ app.get("/health", async () => ({
   ],
   connectors: registry.enabledChannels(),
   trustIdJwks: Boolean(config.trustIdJwksUrl),
+  digiAuthorityJwks: Boolean(config.digiAuthorityJwksUrl),
+  digiAuthority: {
+    jwksConfigured: Boolean(config.digiAuthorityJwksUrl),
+    consumeConfigured: Boolean(config.digiAuthorityConsumeUrl),
+    metrics: getAuthorityMetrics(),
+  },
   persistence: persistenceEnabled() ? "postgres" : "memory",
   websocket: true,
   push: {
@@ -77,6 +89,7 @@ app.get("/health", async () => ({
 }));
 
 await v1Routes(app);
+await authorityRoutes(app);
 await primitiveRoutes(app);
 await directoryRoutes(app);
 await notificationRoutes(app);
