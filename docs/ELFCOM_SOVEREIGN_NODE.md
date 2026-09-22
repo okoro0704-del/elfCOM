@@ -360,7 +360,7 @@ ELFCOMS/
 
 - Monorepo + `@elfcom/contract` + `@elfcom/crypto` + `SessionBinder`
 - `elfcom-node` JWT (`aud=elfcom`) + threads/messages + session bind
-- In-memory sealed store; LifeOS `HttpElfComProvider` + `ELFCOM_MODE=http`
+- **Postgres is the messaging source of truth** (`MessageStore`); memory only for tests/dev without `DATABASE_URL`
 - Smoke: bind → send → listMessages
 
 ### Phase B — Pillar 3 omnichannel aggregator ← **active**

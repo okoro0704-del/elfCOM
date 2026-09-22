@@ -10,10 +10,16 @@ import { callRoutes } from "./routes/calls.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
 import { authorityRoutes, getAuthorityMetrics } from "./routes/authority.js";
 import { messagingService } from "./services/messaging.js";
-import { persistenceEnabled } from "./persistence/postgres.js";
+import {
+  initMessageStore,
+  messagingPersistenceStatus,
+} from "./persistence/bootstrap.js";
 import { apnsConfigured } from "./services/providers/apns.provider.js";
 import { fcmConfigured } from "./services/providers/fcm.provider.js";
 import { webPushConfigured } from "./services/providers/web-push.provider.js";
+
+const messageStore = await initMessageStore();
+messagingService.attachStore(messageStore);
 
 const app = Fastify({ logger: true });
 
@@ -53,46 +59,54 @@ const registry = createConnectorRegistry({
 });
 messagingService.setConnectorRegistry(registry);
 
-app.get("/health", async () => ({
-  ok: true,
-  service: "elfcom-node",
-  nodeId: "elfcom",
-  bound: true,
-  phase: "E",
-  commit:
-    process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 12) ||
-    process.env.ELFCOM_GIT_COMMIT?.slice(0, 12) ||
-    null,
-  authorityEnforcement: true,
-  pillars: [
-    "engine",
-    "omnichannel",
-    "primitive",
-    "realtime",
-    "trustid",
-    "calls",
-    "directory",
-    "notify",
-    "digi-authority",
-  ],
-  connectors: registry.enabledChannels(),
-  trustIdJwks: Boolean(config.trustIdJwksUrl),
-  digiAuthorityJwks: Boolean(config.digiAuthorityJwksUrl),
-  digiAuthority: {
-    jwksConfigured: Boolean(config.digiAuthorityJwksUrl),
-    consumeConfigured: Boolean(config.digiAuthorityConsumeUrl),
-    metrics: getAuthorityMetrics(),
-  },
-  persistence: persistenceEnabled() ? "postgres" : "memory",
-  websocket: true,
-  push: {
-    dryRun: config.pushDryRun,
-    fcm: fcmConfigured(),
-    apns: apnsConfigured(),
-    webPush: webPushConfigured(),
-    baasKeysConfigured: config.baasApiKeys.length > 0,
-  },
-}));
+app.get("/health", async () => {
+  const messaging = messagingPersistenceStatus();
+  return {
+    ok: true,
+    service: "elfcom-node",
+    nodeId: "elfcom",
+    bound: true,
+    phase: "E",
+    commit:
+      process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 12) ||
+      process.env.ELFCOM_GIT_COMMIT?.slice(0, 12) ||
+      null,
+    authorityEnforcement: true,
+    pillars: [
+      "engine",
+      "omnichannel",
+      "primitive",
+      "realtime",
+      "trustid",
+      "calls",
+      "directory",
+      "notify",
+      "digi-authority",
+    ],
+    connectors: registry.enabledChannels(),
+    trustIdJwks: Boolean(config.trustIdJwksUrl),
+    digiAuthorityJwks: Boolean(config.digiAuthorityJwksUrl),
+    digiAuthority: {
+      jwksConfigured: Boolean(config.digiAuthorityJwksUrl),
+      consumeConfigured: Boolean(config.digiAuthorityConsumeUrl),
+      metrics: getAuthorityMetrics(),
+    },
+    persistence: messaging.sourceOfTruth,
+    messaging: {
+      status: messaging.status,
+      sourceOfTruth: messaging.sourceOfTruth,
+      database: messaging.database,
+    },
+    websocket: true,
+    push: {
+      dryRun: config.pushDryRun,
+      fcm: fcmConfigured(),
+      apns: apnsConfigured(),
+      webPush: webPushConfigured(),
+      baasKeysConfigured: config.baasApiKeys.length > 0,
+    },
+  };
+});
 
 await v1Routes(app);
 await authorityRoutes(app);
@@ -106,7 +120,10 @@ await callRoutes(app);
 await app.listen({ port: config.port, host: config.host });
 console.log(`ElfCom node listening on http://${config.host}:${config.port}`);
 console.log(`Omnichannel connectors: ${registry.enabledChannels().join(", ")}`);
-console.log(`Persistence: ${persistenceEnabled() ? "postgres" : "memory"}`);
+const messaging = messagingPersistenceStatus();
+console.log(
+  `Messaging SoT: ${messaging.sourceOfTruth} (db=${messaging.database}, status=${messaging.status})`,
+);
 console.log(
   `Push: dryRun=${config.pushDryRun} fcm=${fcmConfigured()} apns=${apnsConfigured()} web=${webPushConfigured()}`,
 );

@@ -7,6 +7,12 @@ import { computeZkBind, derivePhaseASessionKey } from "@elfcom/crypto";
 import { primitiveRoutes } from "../routes/primitive.js";
 import { messagingService } from "./messaging.js";
 import { routerService } from "./router.service.js";
+import { MemoryMessageStore } from "../store/memory-store.js";
+
+async function resetMessagingStore() {
+  messagingService.attachStore(new MemoryMessageStore());
+  await messagingService.store.clear();
+}
 
 async function mint(owner: string) {
   const secret = process.env.LIFEOS_JWT_SECRET ?? "elfcom-dev-node-secret-change-me";
@@ -33,6 +39,7 @@ async function mint(owner: string) {
 }
 
 test("POST /v1/messages/send routes via RouterService", async () => {
+  await resetMessagingStore();
   const owner = "TD-PRIM-1";
   routerService.setRegistry(null);
   routerService.setSenders({
@@ -79,6 +86,7 @@ test("POST /v1/messages/send routes via RouterService", async () => {
 });
 
 test("POST /v1/messages/batch dispatches concurrently", async () => {
+  await resetMessagingStore();
   const owner = "TD-PRIM-2";
   routerService.setRegistry(null);
   routerService.setSenders({

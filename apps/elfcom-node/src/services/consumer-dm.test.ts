@@ -12,8 +12,14 @@ import { websocketRoutes } from "../routes/primitive.js";
 import { messagingService } from "../services/messaging.js";
 import { webSocketService } from "../services/websocket.service.js";
 import { nativeDmThreadId } from "../services/messaging.js";
+import { MemoryMessageStore } from "../store/memory-store.js";
 
 const SECRET = process.env.LIFEOS_JWT_SECRET ?? "elfcom-dev-node-secret-change-me";
+
+async function resetMessagingStore() {
+  messagingService.attachStore(new MemoryMessageStore());
+  await messagingService.store.clear();
+}
 
 async function mint(owner: string, scp?: string[]) {
   const sid = `e1:${owner}`;
@@ -58,7 +64,7 @@ test("invalid token rejected on inbox", async () => {
 });
 
 test("foreign thread messages return empty / own thread accessible", async () => {
-  messagingService.store.clear();
+  await resetMessagingStore();
   const a = "TD-E1-A";
   const b = "TD-E1-B";
   const tokenA = await mint(a);
@@ -120,7 +126,7 @@ test("foreign thread messages return empty / own thread accessible", async () =>
 });
 
 test("DM send fans out WS to peer only; unrelated user silent", async () => {
-  messagingService.store.clear();
+  await resetMessagingStore();
   webSocketService.__clear();
   const a = "TD-E1-WS-A";
   const b = "TD-E1-WS-B";
@@ -178,7 +184,7 @@ test("DM send fans out WS to peer only; unrelated user silent", async () => {
 });
 
 test("empty send body rejected", async () => {
-  messagingService.store.clear();
+  await resetMessagingStore();
   const a = "TD-E1-EMPTY";
   const token = await mint(a);
   const app = Fastify();

@@ -30,12 +30,13 @@
     "dev": "tsx watch --env-file=../../.env src/index.ts",
     "build": "npm run build -w @elfcom/contract && npm run build -w @elfcom/crypto && npm run build -w @elfcom/connectors-core && npm run build -w @elfcom/connectors && prisma generate --schema=prisma/schema.prisma && tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "start:migrate": "prisma db push --schema=./prisma/schema.prisma --skip-generate && node dist/index.js",
-    "start:prod": "prisma db push --schema=./prisma/schema.prisma --skip-generate && node dist/index.js",
+    "start:migrate": "prisma migrate deploy --schema=./prisma/schema.prisma && node dist/index.js",
+    "start:prod": "prisma migrate deploy --schema=./prisma/schema.prisma && node dist/index.js",
     "start:local": "node --env-file=../../.env dist/index.js",
     "db:generate": "prisma generate --schema=prisma/schema.prisma",
     "db:push": "prisma db push --schema=prisma/schema.prisma",
     "db:migrate": "prisma migrate deploy --schema=prisma/schema.prisma",
-    "test": "tsc -p tsconfig.json && node --import tsx --test src/services/router.service.test.ts src/services/websocket.service.test.ts src/services/primitive.test.ts src/services/push/notify.service.test.ts src/services/consumer-dm.test.ts tests/e2e/hospitalityos-elfcom.test.ts tests/e2e/client-dedupe.test.ts"
+    "test": "tsc -p tsconfig.json && node --import tsx --test --test-concurrency=1 src/services/router.service.test.ts src/services/websocket.service.test.ts src/services/primitive.test.ts src/services/push/notify.service.test.ts src/services/consumer-dm.test.ts src/services/postgres-sot.test.ts tests/e2e/hospitalityos-elfcom.test.ts tests/e2e/client-dedupe.test.ts tests/e2e/postgres-restart.test.ts",
+    "test:e2": "tsc -p tsconfig.json && node --import tsx --test --test-concurrency=1 src/services/postgres-sot.test.ts tests/e2e/postgres-restart.test.ts"
   }
 }

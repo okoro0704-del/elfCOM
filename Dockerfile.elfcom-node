@@ -23,5 +23,5 @@ WORKDIR /app/apps/elfcom-node
 EXPOSE 8791
 HEALTHCHECK --interval=20s --timeout=5s --start-period=45s --retries=6 \
   CMD wget -qO- http://127.0.0.1:${PORT:-8791}/health >/dev/null || exit 1
-# Non-destructive db push (no wipe). Schema is present in this WORKDIR.
-CMD ["sh", "-c", "npx prisma db push --schema=./prisma/schema.prisma --skip-generate && node dist/index.js"]
+# Additive migrate deploy (E2) — never wipe shared tables via db push --accept-data-loss.
+CMD ["sh", "-c", "npx prisma migrate deploy --schema=./prisma/schema.prisma && node dist/index.js"]

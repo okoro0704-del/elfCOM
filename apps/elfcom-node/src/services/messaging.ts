@@ -25,15 +25,10 @@ import {
   type SealAad,
 } from "@elfcom/crypto";
 import { config } from "../config.js";
-import {
-  persistAudit,
-  persistChannelLink,
-  persistMessage,
-  persistOutbox,
-  persistThread,
-} from "../persistence/postgres.js";
+import { persistAudit, persistChannelLink, persistOutbox } from "../persistence/postgres.js";
 import { ChannelLinkStore } from "../store/channel-links.js";
 import { MemoryMessageStore } from "../store/memory-store.js";
+import type { EnsureThreadInput, MessageStore, StoredThread } from "../store/types.js";
 import { routerService } from "./router.service.js";
 import { webSocketService } from "./websocket.service.js";
 
@@ -41,17 +36,31 @@ const REDACTED = "";
 
 export class MessagingService {
   readonly binder: SessionBinder;
-  readonly store = new MemoryMessageStore();
   readonly links = new ChannelLinkStore();
+  private _store: MessageStore;
   private readonly masterKey: Buffer;
   private registry: ConnectorRegistry | null = null;
 
-  constructor() {
+  constructor(store?: MessageStore) {
+    this._store = store ?? new MemoryMessageStore();
     this.masterKey = parseMasterKey(config.nodeMasterKey);
     this.binder = new SessionBinder({
       aud: config.jwtAud,
       defaultTtlMs: config.sessionBindTtlSeconds * 1000,
     });
+  }
+
+  get store(): MessageStore {
+    return this._store;
+  }
+
+  setStore(store: MessageStore) {
+    this._store = store;
+  }
+
+  /** Attach durable store after `initMessageStore()` (production / boot). */
+  attachStore(store: MessageStore) {
+    this.setStore(store);
   }
 
   setConnectorRegistry(registry: ConnectorRegistry) {
@@ -89,7 +98,7 @@ export class MessagingService {
     this.binder.registerPeerPublicKey(ownerTrustId, publicKeyPem);
   }
 
-  linkChannel(input: {
+  async linkChannel(input: {
     ownerTrustId: string;
     channel: ElfComChannel;
     handle: string;
@@ -111,13 +120,13 @@ export class MessagingService {
       handleCipherJson: JSON.stringify(handleCipher),
       createdAt: aad.createdAt,
     });
-    void persistChannelLink({
+    await persistChannelLink({
       ownerTrustId: input.ownerTrustId,
       channel: input.channel,
       handleBlindIndex: blind,
       handleCipherJson: JSON.stringify(handleCipher),
     });
-    void persistAudit({
+    await persistAudit({
       ownerTrustId: input.ownerTrustId,
       op: "channel.linked",
       channel: input.channel,
@@ -134,8 +143,12 @@ export class MessagingService {
 
   /**
    * Ingress path: resolve owner → finalize packet → seal with user key → unified thread.
+   * WS events fire only after durable commit.
    */
-  ingestParsed(channel: ElfComChannel, parsedList: ParsedIngress[]): { accepted: number; dropped: number } {
+  async ingestParsed(
+    channel: ElfComChannel,
+    parsedList: ParsedIngress[],
+  ): Promise<{ accepted: number; dropped: number }> {
     let accepted = 0;
     let dropped = 0;
     for (const parsed of parsedList) {
@@ -145,7 +158,7 @@ export class MessagingService {
         continue;
       }
       const packet = finalizePacket(this.masterKey, parsed, owner);
-      this.persistInbound(packet, parsed.peerHandle);
+      await this.persistInbound(packet, parsed.peerHandle);
       webSocketService.emit({
         typ: "message.created",
         userId: owner,
@@ -167,39 +180,42 @@ export class MessagingService {
     return { accepted, dropped };
   }
 
-  listThreads(
+  async listThreads(
     auth: { sub: string; sid: string; zk_bind: string },
     filter?: { channel?: string },
-  ): ElfComThread[] {
+  ): Promise<ElfComThread[]> {
     this.assertOwner(auth);
     const bound = this.tryRequire(auth);
-    return this.store.listThreads(auth.sub, filter).map((t) => this.toThreadDto(t, bound, auth));
+    const threads = await this.store.listThreads(auth.sub, filter);
+    return Promise.all(threads.map((t) => this.toThreadDto(t, bound, auth)));
   }
 
-  getThread(
+  async getThread(
     auth: { sub: string; sid: string; zk_bind: string },
     threadId: string,
-  ): ElfComThread | null {
+  ): Promise<ElfComThread | null> {
     this.assertOwner(auth);
-    const t = this.store.getThread(auth.sub, threadId);
+    const t = await this.store.getThread(auth.sub, threadId);
     if (!t) return null;
     const bound = this.tryRequire(auth);
     return this.toThreadDto(t, bound, auth);
   }
 
-  listMessages(
+  async listMessages(
     auth: { sub: string; sid: string; zk_bind: string },
     threadId: string,
-  ): ElfComMessage[] {
+    opts?: { limit?: number; afterCreatedAt?: string; afterId?: string },
+  ): Promise<ElfComMessage[]> {
     this.assertOwner(auth);
     const binding = this.binder.requireOpen({
       sid: auth.sid,
       ownerTrustId: auth.sub,
       zk_bind: auth.zk_bind,
     });
-    const thread = this.store.getThread(auth.sub, threadId);
+    const thread = await this.store.getThread(auth.sub, threadId);
     if (!thread) return [];
-    return this.store.listMessages(auth.sub, threadId).map((m) => ({
+    const msgs = await this.store.listMessages(auth.sub, threadId, opts);
+    return msgs.map((m) => ({
       id: m.id,
       threadId: m.threadId,
       body: this.openBody(m, binding.sessionKey, auth.zk_bind, auth.sid),
@@ -214,19 +230,20 @@ export class MessagingService {
    * Rewrap durable ciphertext to the active session key for client-side open.
    * Plaintext exists only briefly in node RAM during rewrap — never logged.
    */
-  listMessageEnvelopes(
+  async listMessageEnvelopes(
     auth: { sub: string; sid: string; zk_bind: string },
     threadId: string,
-  ): SealedMessageEnvelope[] {
+  ): Promise<SealedMessageEnvelope[]> {
     this.assertOwner(auth);
     const binding = this.binder.requireOpen({
       sid: auth.sid,
       ownerTrustId: auth.sub,
       zk_bind: auth.zk_bind,
     });
-    const thread = this.store.getThread(auth.sub, threadId);
+    const thread = await this.store.getThread(auth.sub, threadId);
     if (!thread) return [];
-    return this.store.listMessages(auth.sub, threadId).map((m) => {
+    const msgs = await this.store.listMessages(auth.sub, threadId);
+    return msgs.map((m) => {
       const plaintext = this.openBody(m, binding.sessionKey, auth.zk_bind, auth.sid);
       const aad: SealAad = {
         ownerTrustId: m.ownerTrustId,
@@ -249,21 +266,23 @@ export class MessagingService {
     });
   }
 
-  listThreadEnvelopes(
+  async listThreadEnvelopes(
     auth: { sub: string; sid: string; zk_bind: string },
     filter?: { channel?: string },
-  ): SealedThreadEnvelope[] {
+  ): Promise<SealedThreadEnvelope[]> {
     this.assertOwner(auth);
     const binding = this.binder.requireOpen({
       sid: auth.sid,
       ownerTrustId: auth.sub,
       zk_bind: auth.zk_bind,
     });
-    return this.store.listThreads(auth.sub, filter).map((t) => {
+    const threads = await this.store.listThreads(auth.sub, filter);
+    const envelopes: SealedThreadEnvelope[] = [];
+    for (const t of threads) {
       const title = this.openTitle(t, binding.sessionKey);
       const titleAad = titleAadFields(t);
       const titleCipher = seal(title, binding.sessionKey, titleAad, `sess:${auth.sid}`);
-      const msgs = this.store.listMessages(auth.sub, t.id);
+      const msgs = await this.store.listMessages(auth.sub, t.id);
       const last = msgs[msgs.length - 1];
       let previewCipher: ReturnType<typeof seal> | undefined;
       let previewAad: SealAad | undefined;
@@ -278,7 +297,7 @@ export class MessagingService {
         };
         previewCipher = seal(preview, binding.sessionKey, previewAad, `sess:${auth.sid}`);
       }
-      return {
+      envelopes.push({
         id: t.id,
         updatedAt: t.updatedAt,
         unreadCount: t.unreadCount,
@@ -289,18 +308,19 @@ export class MessagingService {
         titleAad,
         previewCipher,
         previewAad,
-      };
-    });
+      });
+    }
+    return envelopes;
   }
 
   /**
    * Find-or-create a native DM thread for the authenticated owner with peerTrustId.
    * Thread id is owner-scoped: `dm:{owner}:{peer}` (peer sees `dm:{peer}:{owner}`).
    */
-  openDm(
+  async openDm(
     auth: { sub: string; sid: string; zk_bind: string },
     peerTrustId: string,
-  ): ElfComThread {
+  ): Promise<ElfComThread> {
     this.assertOwner(auth);
     this.binder.requireOpen({
       sid: auth.sid,
@@ -312,9 +332,7 @@ export class MessagingService {
       throw new Error("cannot_dm_self");
     }
 
-    const existing = this.store
-      .listThreads(auth.sub, { channel: "dm" })
-      .find((t) => t.peerRef === peer);
+    const existing = await this.store.findDmByPeer(auth.sub, peer);
     if (existing) {
       return this.toThreadDto(existing, this.tryRequire(auth), auth);
     }
@@ -330,7 +348,8 @@ export class MessagingService {
       createdAt: titleCreatedAt,
     };
     const titleCipher = seal(peer, uk, titleAad, `user:${auth.sub}`);
-    const thread = this.store.ensureThread({
+    // ensureThread handles unique races (id / owner+channel+peer)
+    const thread = await this.store.ensureThread({
       id: threadId,
       ownerTrustId: auth.sub,
       titleCipher,
@@ -339,18 +358,6 @@ export class MessagingService {
       channel: "dm",
       peerRef: peer,
       participants: [auth.sub, peer],
-    });
-    void persistThread({
-      id: thread.id,
-      ownerTrustId: thread.ownerTrustId,
-      channel: thread.channel,
-      peerRef: thread.peerRef,
-      titleCipher: thread.titleCipher,
-      titleCreatedAt: thread.titleCreatedAt,
-      titleSealMode: thread.titleSealMode,
-      peerHandleCipher: thread.peerHandleCipher,
-      participants: thread.participants,
-      unreadCount: thread.unreadCount,
     });
     return this.toThreadDto(thread, this.tryRequire(auth), auth);
   }
@@ -376,12 +383,38 @@ export class MessagingService {
     });
 
     const threadId = input.threadId;
-    let thread = this.store.getThread(auth.sub, threadId);
+    const existing = await this.store.getThread(auth.sub, threadId);
     const uk = this.userKey(auth.sub);
-    const preferredChannel = input.channel ?? (thread?.channel as ElfComChannel | undefined) ?? "dm";
-    const peerRef = input.peerRef ?? thread?.peerRef;
+    const preferredChannel =
+      input.channel ?? (existing?.channel as ElfComChannel | undefined) ?? "dm";
+    const peerRef = input.peerRef ?? existing?.peerRef;
 
-    if (!thread) {
+    const messageId = randomUUID();
+    const createdAt = new Date().toISOString();
+    const channelForSeal = existing?.channel ?? preferredChannel;
+    const aad: SealAad = {
+      ownerTrustId: auth.sub,
+      threadId,
+      messageId,
+      channel: channelForSeal,
+      createdAt,
+    };
+    const bodyCipher = seal(input.body, uk, aad, `user:${auth.sub}`);
+
+    const storedMessage = {
+      id: messageId,
+      threadId,
+      ownerTrustId: auth.sub,
+      senderId: auth.sub,
+      channel: channelForSeal,
+      createdAt,
+      bodyCipher,
+      sealMode: "user" as const,
+      direction: "outbound" as const,
+    };
+
+    let thread: StoredThread;
+    if (!existing) {
       const titleCreatedAt = new Date().toISOString();
       const titleAadFields: SealAad = {
         ownerTrustId: auth.sub,
@@ -398,7 +431,7 @@ export class MessagingService {
         titleAadFields,
         `user:${auth.sub}`,
       );
-      thread = this.store.ensureThread({
+      const ensure: EnsureThreadInput = {
         id: threadId,
         ownerTrustId: auth.sub,
         titleCipher,
@@ -407,61 +440,20 @@ export class MessagingService {
         channel: preferredChannel,
         peerRef,
         participants: peerRef ? [auth.sub, peerRef] : [auth.sub],
+      };
+      const committed = await this.store.commitMessage({
+        thread: ensure,
+        message: { ...storedMessage, channel: preferredChannel },
       });
-      void persistThread({
-        id: thread.id,
-        ownerTrustId: thread.ownerTrustId,
-        channel: thread.channel,
-        peerRef: thread.peerRef,
-        titleCipher: thread.titleCipher,
-        titleCreatedAt: thread.titleCreatedAt,
-        titleSealMode: thread.titleSealMode,
-        peerHandleCipher: thread.peerHandleCipher,
-        participants: thread.participants,
-        unreadCount: thread.unreadCount,
+      thread = committed.thread;
+    } else {
+      const committed = await this.store.commitMessage({
+        thread: { existingId: threadId, ownerTrustId: auth.sub },
+        message: storedMessage,
+        patchPeerRef: peerRef && !existing.peerRef ? peerRef : undefined,
       });
-    } else if (peerRef && !thread.peerRef) {
-      thread.peerRef = peerRef;
-      if (!thread.participants.includes(peerRef)) {
-        thread.participants = [...thread.participants, peerRef];
-      }
+      thread = committed.thread;
     }
-
-    const messageId = randomUUID();
-    const createdAt = new Date().toISOString();
-    const aad: SealAad = {
-      ownerTrustId: auth.sub,
-      threadId,
-      messageId,
-      channel: thread.channel,
-      createdAt,
-    };
-
-    const bodyCipher = seal(input.body, uk, aad, `user:${auth.sub}`);
-
-    this.store.appendMessage({
-      id: messageId,
-      threadId,
-      ownerTrustId: auth.sub,
-      senderId: auth.sub,
-      channel: thread.channel,
-      createdAt,
-      bodyCipher,
-      sealMode: "user",
-      direction: "outbound",
-    });
-
-    void persistMessage({
-      id: messageId,
-      threadId,
-      ownerTrustId: auth.sub,
-      senderId: auth.sub,
-      channel: thread.channel,
-      direction: "outbound",
-      sealMode: "user",
-      bodyCipher,
-      createdAt,
-    });
 
     let peerHandle = input.peerHandle;
     if (!peerHandle && thread.peerHandleCipher) {
@@ -490,7 +482,7 @@ export class MessagingService {
       fallbackChannels: input.fallbackChannels,
     });
 
-    void persistOutbox({
+    await persistOutbox({
       ownerTrustId: auth.sub,
       threadId: thread.id,
       messageId,
@@ -500,7 +492,7 @@ export class MessagingService {
       lastError: route.ok ? undefined : route.attempts.map((a) => a.error).filter(Boolean).join("; "),
       providerMessageId: route.providerMessageId,
     });
-    void persistAudit({
+    await persistAudit({
       ownerTrustId: auth.sub,
       op: route.ok ? "message.delivered" : "message.route_failed",
       channel: route.channel ?? thread.channel,
@@ -543,7 +535,7 @@ export class MessagingService {
     // Native TrustID↔TrustID DM: mirror into peer inbox + fan-out WS (owner-scoped threads).
     const dmPeer = thread.peerRef ?? input.peerRef;
     if ((route.channel ?? thread.channel) === "dm" && dmPeer && dmPeer !== auth.sub) {
-      this.mirrorNativeDmToPeer({
+      await this.mirrorNativeDmToPeer({
         fromTrustId: auth.sub,
         peerTrustId: dmPeer,
         body: input.body,
@@ -555,7 +547,7 @@ export class MessagingService {
 
     return {
       id: messageId,
-      threadId,
+      threadId: thread.id,
       body: input.body,
       senderId: auth.sub,
       createdAt,
@@ -611,13 +603,36 @@ export class MessagingService {
     return { message, route: message.route };
   }
 
-  private persistInbound(packet: NormalizedIngressPacket, peerHandle: string) {
+  private async persistInbound(packet: NormalizedIngressPacket, peerHandle: string) {
     const uk = this.userKey(packet.ownerTrustId);
     const threadId = packet.threadKey;
     const titleCreatedAt = packet.sentAt;
-    let thread = this.store.getThread(packet.ownerTrustId, threadId);
+    const existing = await this.store.getThread(packet.ownerTrustId, threadId);
 
-    if (!thread) {
+    const messageId = packet.packetId;
+    const aad: SealAad = {
+      ownerTrustId: packet.ownerTrustId,
+      threadId,
+      messageId,
+      channel: packet.channel,
+      createdAt: packet.sentAt,
+    };
+    const body = packet.plaintextBody ?? (packet.mediaRef ? `[media:${packet.mediaRef}]` : "");
+    const bodyCipher = seal(body, uk, aad, `user:${packet.ownerTrustId}`);
+
+    const storedMessage = {
+      id: messageId,
+      threadId,
+      ownerTrustId: packet.ownerTrustId,
+      senderId: packet.fromRef,
+      channel: packet.channel,
+      createdAt: packet.sentAt,
+      bodyCipher,
+      sealMode: "user" as const,
+      direction: "inbound" as const,
+    };
+
+    if (!existing) {
       const titleAad: SealAad = {
         ownerTrustId: packet.ownerTrustId,
         threadId,
@@ -640,66 +655,28 @@ export class MessagingService {
         peerAad,
         `user:${packet.ownerTrustId}`,
       );
-      thread = this.store.ensureThread({
-        id: threadId,
-        ownerTrustId: packet.ownerTrustId,
-        titleCipher,
-        titleCreatedAt,
-        titleSealMode: "user",
-        channel: packet.channel,
-        peerRef: packet.fromRef,
-        peerHandleCipher,
-        participants: [packet.ownerTrustId, packet.fromRef],
+      await this.store.commitMessage({
+        thread: {
+          id: threadId,
+          ownerTrustId: packet.ownerTrustId,
+          titleCipher,
+          titleCreatedAt,
+          titleSealMode: "user",
+          channel: packet.channel,
+          peerRef: packet.fromRef,
+          peerHandleCipher,
+          participants: [packet.ownerTrustId, packet.fromRef],
+        },
+        message: storedMessage,
+      });
+    } else {
+      await this.store.commitMessage({
+        thread: { existingId: threadId, ownerTrustId: packet.ownerTrustId },
+        message: storedMessage,
       });
     }
 
-    const messageId = packet.packetId;
-    const aad: SealAad = {
-      ownerTrustId: packet.ownerTrustId,
-      threadId,
-      messageId,
-      channel: packet.channel,
-      createdAt: packet.sentAt,
-    };
-    const body = packet.plaintextBody ?? (packet.mediaRef ? `[media:${packet.mediaRef}]` : "");
-    const bodyCipher = seal(body, uk, aad, `user:${packet.ownerTrustId}`);
-
-    this.store.appendMessage({
-      id: messageId,
-      threadId,
-      ownerTrustId: packet.ownerTrustId,
-      senderId: packet.fromRef,
-      channel: packet.channel,
-      createdAt: packet.sentAt,
-      bodyCipher,
-      sealMode: "user",
-      direction: "inbound",
-    });
-
-    void persistThread({
-      id: thread.id,
-      ownerTrustId: thread.ownerTrustId,
-      channel: thread.channel,
-      peerRef: thread.peerRef,
-      titleCipher: thread.titleCipher,
-      titleCreatedAt: thread.titleCreatedAt,
-      titleSealMode: thread.titleSealMode,
-      peerHandleCipher: thread.peerHandleCipher,
-      participants: thread.participants,
-      unreadCount: thread.unreadCount,
-    });
-    void persistMessage({
-      id: messageId,
-      threadId,
-      ownerTrustId: packet.ownerTrustId,
-      senderId: packet.fromRef,
-      channel: packet.channel,
-      direction: "inbound",
-      sealMode: "user",
-      bodyCipher,
-      createdAt: packet.sentAt,
-    });
-    void persistAudit({
+    await persistAudit({
       ownerTrustId: packet.ownerTrustId,
       op: "message.ingested",
       channel: packet.channel,
@@ -726,17 +703,17 @@ export class MessagingService {
     return null;
   }
 
-  private toThreadDto(
-    t: import("../store/memory-store.js").StoredThread,
+  private async toThreadDto(
+    t: StoredThread,
     bound: { sessionKey: Buffer } | null,
     auth: { sub: string; sid: string; zk_bind: string },
-  ): ElfComThread {
+  ): Promise<ElfComThread> {
     let title = "Thread";
     let preview = REDACTED;
     if (bound) {
       try {
         title = this.openTitle(t, bound.sessionKey);
-        const msgs = this.store.listMessages(auth.sub, t.id);
+        const msgs = await this.store.listMessages(auth.sub, t.id);
         const last = msgs[msgs.length - 1];
         if (last) {
           preview = this.openBody(last, bound.sessionKey, auth.zk_bind, auth.sid);
@@ -758,10 +735,7 @@ export class MessagingService {
     };
   }
 
-  private openTitle(
-    t: import("../store/memory-store.js").StoredThread,
-    sessionKey: Buffer,
-  ): string {
+  private openTitle(t: StoredThread, sessionKey: Buffer): string {
     const aad = titleAad(t);
     if (t.titleSealMode === "user") {
       return openUtf8(t.titleCipher, this.userKey(t.ownerTrustId), aad);
@@ -938,8 +912,9 @@ export class MessagingService {
   /**
    * Deliver a native DM into the peer's owner-scoped inbox and emit realtime events to them.
    * Peer thread id: `dm:{peer}:{from}` — separate from sender's `dm:{from}:{peer}`.
+   * Durable commit completes before WS emit.
    */
-  private mirrorNativeDmToPeer(input: {
+  private async mirrorNativeDmToPeer(input: {
     fromTrustId: string;
     peerTrustId: string;
     body: string;
@@ -950,46 +925,15 @@ export class MessagingService {
     const peerOwner = input.peerTrustId;
     const peerThreadId = nativeDmThreadId(peerOwner, input.fromTrustId);
     const uk = this.userKey(peerOwner);
-    let peerThread = this.store.getThread(peerOwner, peerThreadId);
-
-    if (!peerThread) {
-      const titleAad: SealAad = {
-        ownerTrustId: peerOwner,
-        threadId: peerThreadId,
-        messageId: `${peerThreadId}:title`,
-        channel: "dm",
-        createdAt: input.createdAt,
-      };
-      const titleCipher = seal(input.fromTrustId, uk, titleAad, `user:${peerOwner}`);
-      peerThread = this.store.ensureThread({
-        id: peerThreadId,
-        ownerTrustId: peerOwner,
-        titleCipher,
-        titleCreatedAt: input.createdAt,
-        titleSealMode: "user",
-        channel: "dm",
-        peerRef: input.fromTrustId,
-        participants: [peerOwner, input.fromTrustId],
-      });
-      void persistThread({
-        id: peerThread.id,
-        ownerTrustId: peerThread.ownerTrustId,
-        channel: peerThread.channel,
-        peerRef: peerThread.peerRef,
-        titleCipher: peerThread.titleCipher,
-        titleCreatedAt: peerThread.titleCreatedAt,
-        titleSealMode: peerThread.titleSealMode,
-        peerHandleCipher: peerThread.peerHandleCipher,
-        participants: peerThread.participants,
-        unreadCount: peerThread.unreadCount,
-      });
-    }
+    const existingThread = await this.store.getThread(peerOwner, peerThreadId);
 
     const inboundId = input.messageId;
-    const existing = this.store
-      .listMessages(peerOwner, peerThreadId)
-      .some((m) => m.id === inboundId);
-    if (!existing) {
+    const existingMsgs = existingThread
+      ? await this.store.listMessages(peerOwner, peerThreadId)
+      : [];
+    const already = existingMsgs.some((m) => m.id === inboundId);
+
+    if (!already) {
       const aad: SealAad = {
         ownerTrustId: peerOwner,
         threadId: peerThreadId,
@@ -998,7 +942,7 @@ export class MessagingService {
         createdAt: input.createdAt,
       };
       const bodyCipher = seal(input.body, uk, aad, `user:${peerOwner}`);
-      this.store.appendMessage({
+      const storedMessage = {
         id: inboundId,
         threadId: peerThreadId,
         ownerTrustId: peerOwner,
@@ -1006,20 +950,38 @@ export class MessagingService {
         channel: "dm",
         createdAt: input.createdAt,
         bodyCipher,
-        sealMode: "user",
-        direction: "inbound",
-      });
-      void persistMessage({
-        id: inboundId,
-        threadId: peerThreadId,
-        ownerTrustId: peerOwner,
-        senderId: input.fromTrustId,
-        channel: "dm",
-        direction: "inbound",
-        sealMode: "user",
-        bodyCipher,
-        createdAt: input.createdAt,
-      });
+        sealMode: "user" as const,
+        direction: "inbound" as const,
+      };
+
+      if (!existingThread) {
+        const titleAad: SealAad = {
+          ownerTrustId: peerOwner,
+          threadId: peerThreadId,
+          messageId: `${peerThreadId}:title`,
+          channel: "dm",
+          createdAt: input.createdAt,
+        };
+        const titleCipher = seal(input.fromTrustId, uk, titleAad, `user:${peerOwner}`);
+        await this.store.commitMessage({
+          thread: {
+            id: peerThreadId,
+            ownerTrustId: peerOwner,
+            titleCipher,
+            titleCreatedAt: input.createdAt,
+            titleSealMode: "user",
+            channel: "dm",
+            peerRef: input.fromTrustId,
+            participants: [peerOwner, input.fromTrustId],
+          },
+          message: storedMessage,
+        });
+      } else {
+        await this.store.commitMessage({
+          thread: { existingId: peerThreadId, ownerTrustId: peerOwner },
+          message: storedMessage,
+        });
+      }
     }
 
     webSocketService.emit({

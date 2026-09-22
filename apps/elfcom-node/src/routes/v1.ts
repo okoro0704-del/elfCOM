@@ -72,7 +72,7 @@ export async function v1Routes(app: FastifyInstance) {
     if (reply.sent) return;
     const body = openDmBody.parse(req.body);
     try {
-      const thread = messagingService.openDm(req.elfcomAuth!, body.peerTrustId);
+      const thread = await messagingService.openDm(req.elfcomAuth!, body.peerTrustId);
       return { thread };
     } catch (err) {
       if (err instanceof Error && err.message === "cannot_dm_self") {
@@ -105,7 +105,7 @@ export async function v1Routes(app: FastifyInstance) {
       return bindError(reply, err);
     }
 
-    const linked = messagingService.linkChannel({
+    const linked = await messagingService.linkChannel({
       ownerTrustId: auth.sub,
       channel: body.channel,
       handle: body.handle,
@@ -120,10 +120,10 @@ export async function v1Routes(app: FastifyInstance) {
     const filter = { channel: typeof q.channel === "string" ? q.channel : undefined };
     try {
       if (q.envelope === "1" || q.envelope === "true") {
-        const threads = messagingService.listThreadEnvelopes(req.elfcomAuth!, filter);
+        const threads = await messagingService.listThreadEnvelopes(req.elfcomAuth!, filter);
         return { envelope: true as const, threads };
       }
-      const threads = messagingService.listThreads(req.elfcomAuth!, filter);
+      const threads = await messagingService.listThreads(req.elfcomAuth!, filter);
       return { threads };
     } catch (err) {
       return bindError(reply, err);
@@ -141,16 +141,31 @@ export async function v1Routes(app: FastifyInstance) {
     async (req, reply) => {
       await requireTrustIdOrCapability(req, reply, ["thread:read"]);
       if (reply.sent) return;
-      const q = req.query as { envelope?: string };
+      const q = req.query as {
+        envelope?: string;
+        limit?: string;
+        afterCreatedAt?: string;
+        afterId?: string;
+      };
+      const limit = q.limit ? Number(q.limit) : undefined;
+      const pageOpts = {
+        ...(Number.isFinite(limit) ? { limit } : {}),
+        ...(q.afterCreatedAt ? { afterCreatedAt: q.afterCreatedAt } : {}),
+        ...(q.afterId ? { afterId: q.afterId } : {}),
+      };
       try {
         if (q.envelope === "1" || q.envelope === "true") {
-          const messages = messagingService.listMessageEnvelopes(
+          const messages = await messagingService.listMessageEnvelopes(
             req.elfcomAuth!,
             req.params.threadId,
           );
           return { envelope: true as const, messages };
         }
-        const messages = messagingService.listMessages(req.elfcomAuth!, req.params.threadId);
+        const messages = await messagingService.listMessages(
+          req.elfcomAuth!,
+          req.params.threadId,
+          pageOpts,
+        );
         return { messages };
       } catch (err) {
         return bindError(reply, err);

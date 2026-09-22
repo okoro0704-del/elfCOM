@@ -128,12 +128,12 @@ export async function primitiveRoutes(app: FastifyInstance) {
     if (req.params.userId === auth.sub) {
       try {
         if (q.envelope === "1" || q.envelope === "true") {
-          const threads = messagingService.listThreadEnvelopes(auth, {
+          const threads = await messagingService.listThreadEnvelopes(auth, {
             channel: typeof q.channel === "string" ? q.channel : undefined,
           });
           return { userId: req.params.userId, envelope: true as const, threads };
         }
-        const threads = messagingService.listThreads(auth, {
+        const threads = await messagingService.listThreads(auth, {
           channel: typeof q.channel === "string" ? (q.channel as ElfComChannel) : undefined,
         });
         return { userId: req.params.userId, threads };
@@ -143,7 +143,7 @@ export async function primitiveRoutes(app: FastifyInstance) {
     }
 
     try {
-      const thread = messagingService.getThread(auth, req.params.userId);
+      const thread = await messagingService.getThread(auth, req.params.userId);
       if (!thread) return reply.code(404).send({ error: "not_found" });
       return { thread };
     } catch (err) {

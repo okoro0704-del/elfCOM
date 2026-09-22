@@ -10,7 +10,7 @@
 | RouterService | `apps/elfcom-node/src/services/router.service.ts` |
 | WebSocket hub | `apps/elfcom-node/src/services/websocket.service.ts` + `GET /v1/events` |
 | Primitive HTTP | `POST /v1/messages/send`, `POST /v1/messages/batch`, `GET /v1/threads/:userId` |
-| Postgres schema | `apps/elfcom-node/prisma/schema.prisma` (optional via `DATABASE_URL`) |
+| Postgres schema | `apps/elfcom-node/prisma/schema.prisma` (required in production via `DATABASE_URL`) |
 | LifeOS adapter | Uses primitive send + `GET /v1/threads/:userId` |
 | Console | `useElfComEvents` WS refresh (polling retained as fallback) |
 
@@ -23,8 +23,9 @@
 
 ## Persistence
 
-- Hot path remains in-memory for dev/tests.
-- When `DATABASE_URL` is set, dual-write threads/messages/links/audit/outbox to Postgres.
+- **PostgreSQL is the durable source of truth** for threads/messages (`MessageStore` via `initMessageStore` / `PostgresMessageStore`).
+- WebSocket events emit only after `commitMessage` completes.
+- Memory store is for tests / explicit non-production when `DATABASE_URL` is unset.
 - Apply schema: `npm run db:push -w @elfcom/node`
 
 ## Tests

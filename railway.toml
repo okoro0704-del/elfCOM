@@ -1,15 +1,13 @@
 # Railway — ElfCom API only (@elfcom/node)
-# Dockerfile.elfcom-node avoids Railpack omitting prisma/schema at runtime
-# (start:migrate failed with: Could not load --schema from prisma/schema.prisma).
+# Dockerfile.elfcom-node keeps prisma/schema + migrations on the runtime image.
+# Prefer migrate deploy (additive) over db push (can refuse shared-table diffs).
 
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile.elfcom-node"
 
 [deploy]
-# CMD is in Dockerfile (prisma db push + node). Leave empty to use image CMD,
-# or override with the same safe path:
-startCommand = "sh -c 'npx prisma db push --schema=./prisma/schema.prisma --skip-generate && node dist/index.js'"
+startCommand = "sh -c 'npx prisma migrate deploy --schema=./prisma/schema.prisma && node dist/index.js'"
 restartPolicyType = "ON_FAILURE"
 healthcheckPath = "/health"
 healthcheckTimeout = 100

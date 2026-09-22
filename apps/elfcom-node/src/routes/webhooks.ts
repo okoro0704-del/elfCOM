@@ -65,7 +65,7 @@ export async function webhookRoutes(app: FastifyInstance, registry: ConnectorReg
     if (!ok) return reply.code(401).send({ error: "invalid_signature" });
 
     const parsed = await connector.parseIngress(creq);
-    const result = messagingService.ingestParsed(channel, parsed);
+    const result = await messagingService.ingestParsed(channel, parsed);
 
     app.log.info(
       { channel, accepted: result.accepted, dropped: result.dropped },

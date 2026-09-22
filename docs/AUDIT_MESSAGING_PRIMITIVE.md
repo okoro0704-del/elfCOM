@@ -72,8 +72,10 @@
 
 ### 1.6 Persistence
 
-- `MemoryMessageStore` + `ChannelLinkStore` only — **no durable DB**
-- Restart loses all threads/messages/links
+- **E2:** PostgreSQL is the durable source of truth for threads/messages (`PostgresMessageStore`).
+- `MemoryMessageStore` remains for unit tests / explicit non-production only.
+- Production refuses memory fallback when `DATABASE_URL` is missing or unreachable.
+- Directory / session binder / WS registry remain process-local (not E2).
 
 ### 1.7 Tests
 

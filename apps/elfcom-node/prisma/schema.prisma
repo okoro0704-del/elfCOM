@@ -24,14 +24,16 @@ model Thread {
   createdAt         DateTime @default(now()) @map("created_at")
   messages          Message[]
 
+  @@unique([ownerTrustId, channel, peerRef], name: "threads_owner_channel_peer_key")
   @@index([ownerTrustId, updatedAt(sort: Desc)])
   @@index([ownerTrustId, channel])
   @@map("threads")
 }
 
 /// Ciphertext message bodies only.
+/// Same logical message id may exist once per owner (native DM mirror copies).
 model Message {
-  id             String   @id
+  id             String   @map("id")
   threadId       String   @map("thread_id")
   ownerTrustId   String   @map("owner_trust_id")
   senderId       String   @map("sender_id")
@@ -42,6 +44,7 @@ model Message {
   createdAt      DateTime @map("created_at")
   thread         Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
+  @@id([id, ownerTrustId])
   @@index([threadId, createdAt])
   @@index([ownerTrustId, createdAt(sort: Desc)])
   @@map("messages")

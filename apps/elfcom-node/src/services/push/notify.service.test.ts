@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach, after } from "node:test";
 import { dispatchNotification } from "./notify.service.js";
 import {
   __memSnapshot,
@@ -8,9 +8,17 @@ import {
 } from "./push-store.js";
 
 describe("notify.service", () => {
+  const savedDbUrl = process.env.DATABASE_URL;
+
   beforeEach(() => {
+    // Force memory push store so __memSnapshot assertions stay deterministic.
+    delete process.env.DATABASE_URL;
     __resetPushStore();
     process.env.ELFCOM_PUSH_DRY_RUN = "true";
+  });
+
+  after(() => {
+    if (savedDbUrl !== undefined) process.env.DATABASE_URL = savedDbUrl;
   });
 
   it("dispatches high-priority job to all active tokens for a trustId", async () => {
