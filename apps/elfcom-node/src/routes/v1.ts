@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { SessionBindError } from "@elfcom/crypto";
-import { requireCapability } from "../auth/node-jwt.js";
+import { requireTrustIdOrCapability } from "../middleware/trustid-auth.js";
 import { messagingService } from "../services/messaging.js";
 
 const bindBody = z.object({
@@ -14,6 +14,12 @@ const bindBody = z.object({
 
 const sendBody = z.object({
   body: z.string().min(1).max(4000),
+  peerRef: z.string().min(1).max(320).optional(),
+  channel: z.enum(["whatsapp", "telegram", "email", "instagram", "x", "dm", "bus"]).optional(),
+});
+
+const openDmBody = z.object({
+  peerTrustId: z.string().min(1).max(320),
 });
 
 const linkBody = z.object({
@@ -30,7 +36,7 @@ function bindError(reply: import("fastify").FastifyReply, err: unknown) {
 
 export async function v1Routes(app: FastifyInstance) {
   app.post("/v1/session/bind", async (req, reply) => {
-    await requireCapability(req, reply, ["session:bind"]);
+    await requireTrustIdOrCapability(req, reply, ["session:bind"]);
     if (reply.sent) return;
 
     const body = bindBody.parse(req.body);
@@ -54,14 +60,30 @@ export async function v1Routes(app: FastifyInstance) {
   });
 
   app.delete("/v1/session/bind", async (req, reply) => {
-    await requireCapability(req, reply, ["session:bind"]);
+    await requireTrustIdOrCapability(req, reply, ["session:bind"]);
     if (reply.sent) return;
     messagingService.unbindSession(req.elfcomAuth!.sid);
     return reply.code(204).send();
   });
 
+  /** Find-or-create native DM thread with another TrustID (no message yet). */
+  app.post("/v1/dm/open", async (req, reply) => {
+    await requireTrustIdOrCapability(req, reply, ["thread:write"]);
+    if (reply.sent) return;
+    const body = openDmBody.parse(req.body);
+    try {
+      const thread = messagingService.openDm(req.elfcomAuth!, body.peerTrustId);
+      return { thread };
+    } catch (err) {
+      if (err instanceof Error && err.message === "cannot_dm_self") {
+        return reply.code(400).send({ error: "bad_request", message: "cannot DM yourself" });
+      }
+      return bindError(reply, err);
+    }
+  });
+
   app.post("/v1/channels/link", async (req, reply) => {
-    await requireCapability(req, reply, []);
+    await requireTrustIdOrCapability(req, reply, []);
     if (reply.sent) return;
     const auth = req.elfcomAuth!;
     const hasScope =
@@ -92,7 +114,7 @@ export async function v1Routes(app: FastifyInstance) {
   });
 
   async function inboxHandler(req: import("fastify").FastifyRequest, reply: import("fastify").FastifyReply) {
-    await requireCapability(req, reply, ["thread:read"]);
+    await requireTrustIdOrCapability(req, reply, ["thread:read"]);
     if (reply.sent) return;
     const q = req.query as { channel?: string; envelope?: string };
     const filter = { channel: typeof q.channel === "string" ? q.channel : undefined };
@@ -117,7 +139,7 @@ export async function v1Routes(app: FastifyInstance) {
   app.get<{ Params: { threadId: string } }>(
     "/v1/threads/:threadId/messages",
     async (req, reply) => {
-      await requireCapability(req, reply, ["thread:read"]);
+      await requireTrustIdOrCapability(req, reply, ["thread:read"]);
       if (reply.sent) return;
       const q = req.query as { envelope?: string };
       try {
@@ -139,13 +161,19 @@ export async function v1Routes(app: FastifyInstance) {
   app.post<{ Params: { threadId: string } }>(
     "/v1/threads/:threadId/messages",
     async (req, reply) => {
-      await requireCapability(req, reply, ["message:send"]);
+      await requireTrustIdOrCapability(req, reply, ["message:send"]);
       if (reply.sent) return;
-      const body = sendBody.parse(req.body);
+      const parsed = sendBody.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: "bad_request", details: parsed.error.flatten() });
+      }
+      const body = parsed.data;
       try {
         const message = await messagingService.sendMessage(req.elfcomAuth!, {
           threadId: req.params.threadId,
           body: body.body,
+          peerRef: body.peerRef,
+          channel: body.channel,
         });
         return { message };
       } catch (err) {

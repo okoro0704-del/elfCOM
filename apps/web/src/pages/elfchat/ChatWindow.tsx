@@ -8,9 +8,9 @@ import { useAuthStore } from "../../store/authStore";
 import { useChatStore } from "../../store/chatStore";
 import { useUiStore } from "../../store/uiStore";
 
-function deliveryLabel(d: string) {
-  if (d === "read") return "Read";
-  if (d === "delivered") return "Delivered";
+function statusLabel(status: string) {
+  if (status === "LOCAL_PENDING") return "Sending…";
+  if (status === "FAILED") return "Failed · tap to retry";
   return "Sent";
 }
 
@@ -19,12 +19,16 @@ type Props = {
   onBack?: () => void;
 };
 
-/** ElfChat thread view with Personal/Business badge and WebRTC call actions. */
+/** ElfChat thread view — server-backed messages via ElfCom node. */
 export function ChatWindow({ threadId, onBack }: Props) {
   const thread = useChatStore((s) => s.threads.find((t) => t.id === threadId));
   const messages = useChatStore((s) => s.messages[threadId] ?? []);
   const setActiveThread = useChatStore((s) => s.setActiveThread);
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const retryMessage = useChatStore((s) => s.retryMessage);
+  const messagesLoading = useChatStore((s) => s.messagesLoading);
+  const sendError = useChatStore((s) => s.sendError);
+  const connectionStatus = useChatStore((s) => s.connectionStatus);
   const context = useAccountStore((s) => s.context);
   const switchMode = useAccountStore((s) => s.switchMode);
   const needsSetup = useAccountStore((s) => s.needsSetup);
@@ -32,6 +36,7 @@ export function ChatWindow({ threadId, onBack }: Props) {
   const setHideChrome = useUiStore((s) => s.setHideChrome);
   const trustId = useAuthStore((s) => s.session?.trustId);
   const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     setHideChrome(true);
@@ -56,6 +61,19 @@ export function ChatWindow({ threadId, onBack }: Props) {
     onBack?.();
   };
 
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!draft.trim() || sending) return;
+    const text = draft;
+    setDraft("");
+    setSending(true);
+    try {
+      await sendMessage(threadId, text);
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-ink safe-pt safe-pb">
       <header className="flex items-center gap-2 border-b border-line px-3 py-2.5">
@@ -75,7 +93,7 @@ export function ChatWindow({ threadId, onBack }: Props) {
             </span>
           </div>
           <p className="truncate text-xs text-mist">
-            {thread.peer.presence === "online" ? "Online" : thread.peer.handle}
+            {connectionStatus === "online" ? "Online" : thread.peer.handle}
             {thread.typing ? " · typing…" : ""}
           </p>
         </div>
@@ -121,38 +139,50 @@ export function ChatWindow({ threadId, onBack }: Props) {
       ) : null}
 
       <div className="app-scroll flex-1 space-y-3 overflow-y-auto px-3 py-4">
+        {messagesLoading && messages.length === 0 ? (
+          <p className="text-center text-sm text-mist">Loading messages…</p>
+        ) : null}
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.fromMe ? "justify-end" : "justify-start"}`}>
-            <div
+            <button
+              type="button"
+              disabled={m.status !== "FAILED"}
+              onClick={() => {
+                if (m.status === "FAILED" && m.clientId) {
+                  void retryMessage(threadId, m.clientId);
+                }
+              }}
               className={[
-                "max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm",
+                "max-w-[80%] rounded-2xl px-3.5 py-2.5 text-left text-sm",
                 m.fromMe ? "rounded-br-md bg-accent text-ink" : "rounded-bl-md bg-panel text-foam",
+                m.status === "FAILED" ? "opacity-80 ring-1 ring-danger" : "",
               ].join(" ")}
             >
               <p>{m.body}</p>
               {m.fromMe ? (
-                <p className="mt-1 text-right text-[10px] opacity-70">{deliveryLabel(m.delivery)}</p>
+                <p className="mt-1 text-right text-[10px] opacity-70">{statusLabel(m.status)}</p>
               ) : null}
-            </div>
+            </button>
           </div>
         ))}
       </div>
 
-      <form
-        className="flex gap-2 border-t border-line p-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          sendMessage(threadId, draft);
-          setDraft("");
-        }}
-      >
+      {sendError ? (
+        <p className="px-3 text-center text-[11px] text-danger">{sendError}</p>
+      ) : null}
+
+      <form className="flex gap-2 border-t border-line p-3" onSubmit={(e) => void onSubmit(e)}>
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Message"
           className="min-w-0 flex-1 rounded-2xl border border-line bg-panel px-4 py-3 outline-none"
         />
-        <button type="submit" className="rounded-2xl bg-accent px-4 font-semibold text-ink">
+        <button
+          type="submit"
+          disabled={sending || !draft.trim()}
+          className="rounded-2xl bg-accent px-4 font-semibold text-ink disabled:opacity-50"
+        >
           Send
         </button>
       </form>

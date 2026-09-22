@@ -24,7 +24,7 @@ export function UserLookupModal() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const setLookupOpen = useChatStore((s) => s.setLookupOpen);
-  const startChatWith = useChatStore((s) => s.startChatWith);
+  const openConversationWith = useChatStore((s) => s.openConversationWith);
   const setComposerOpen = useMailStore((s) => s.setComposerOpen);
   const accessToken = useAuthStore((s) => s.session?.accessToken);
   const navigate = useNavigate();
@@ -95,7 +95,7 @@ export function UserLookupModal() {
               key={`${u.trustId}:${u.mode}`}
               user={u}
               onStartChat={(tid) => {
-                startChatWith(tid, {
+                void openConversationWith(tid, {
                   id: tid,
                   displayName: u.displayName,
                   handle: u.username ? `@${u.username}` : u.tidHandle,
@@ -103,7 +103,6 @@ export function UserLookupModal() {
                   phone: u.phone,
                   presence: "offline",
                 });
-                setLookupOpen(false);
               }}
               onSendMail={() => {
                 setLookupOpen(false);
@@ -121,8 +120,9 @@ export function UserLookupModal() {
           type="button"
           disabled={!query.trim()}
           onClick={() => {
-            startChatWith(query, peerMetaFromQuery(query));
-            setLookupOpen(false);
+            const meta = peerMetaFromQuery(query);
+            const peerId = meta.email || meta.phone || meta.handle.replace(/^[@$]/, "") || query.trim();
+            void openConversationWith(peerId, { ...meta, id: peerId });
           }}
           className="mt-4 w-full rounded-2xl border border-line py-3 text-sm font-medium text-foam disabled:opacity-40"
         >

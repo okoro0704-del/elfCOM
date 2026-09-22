@@ -58,6 +58,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   clearSession: () => {
     sessionStorage.removeItem(STORAGE_KEY);
     set({ session: null });
+    try {
+      // Lazy import avoid cycle — disconnect ElfCom engine on logout.
+      void import("./chatStore").then((m) => m.useChatStore.getState().disconnectEngine());
+    } catch {
+      /* ignore */
+    }
   },
   isAuthenticated: () => Boolean(get().session?.accessToken),
 }));

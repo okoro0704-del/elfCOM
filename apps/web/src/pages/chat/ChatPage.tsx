@@ -7,6 +7,7 @@ import { useChatStore } from "../../store/chatStore";
 import { useUiStore } from "../../store/uiStore";
 import { ProfileSwitcher } from "@elfcom/ui";
 import type { ProfileMode } from "@elfcom/core";
+import { ChatConnectionStatus } from "../../components/ChatConnectionStatus";
 import { UserLookupModal } from "./UserLookupModal";
 import { ChatWindow } from "../elfchat/ChatWindow";
 
@@ -23,6 +24,8 @@ export function ChatPage() {
   const lookupOpen = useChatStore((s) => s.lookupOpen);
   const setLookupOpen = useChatStore((s) => s.setLookupOpen);
   const setActiveThread = useChatStore((s) => s.setActiveThread);
+  const inboxLoading = useChatStore((s) => s.inboxLoading);
+  const connectionStatus = useChatStore((s) => s.connectionStatus);
   const setHideChrome = useUiStore((s) => s.setHideChrome);
   const trustId = useAuthStore((s) => s.session?.trustId);
   const context = useAccountStore((s) => s.context);
@@ -55,7 +58,7 @@ export function ChatPage() {
     <div className="flex min-h-full flex-col">
       <TopAppBar
         title="ElfChat"
-        subtitle="P2P · directory · WebRTC"
+        subtitle="TrustID · live"
         left={
           context ? (
             <ProfileSwitcher activeMode={context.activeMode} onSwitch={onSwitchMode} />
@@ -71,15 +74,19 @@ export function ChatPage() {
           </button>
         }
       />
+      <ChatConnectionStatus />
 
-      {threads.length === 0 ? (
+      {inboxLoading && threads.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center px-8 py-16 text-sm text-mist">
+          Loading conversations…
+        </div>
+      ) : threads.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 py-16 text-center">
           <p className="font-display text-lg font-semibold">No conversations yet</p>
           <p className="text-sm text-mist">
-            Find people by email, phone, or username. Chats on this device stay private to your
-            session — stay online to send and receive live messages.
+            Find someone by TrustID in the directory, then send a real message through ElfCom.
           </p>
-          {!online ? (
+          {!online || connectionStatus === "offline" ? (
             <p className="rounded-xl border border-line bg-panel px-3 py-2 text-xs text-accent">
               You&apos;re offline. Reconnect to search the directory and sync.
             </p>

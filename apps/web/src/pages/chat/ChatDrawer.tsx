@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useChatStore } from "../../store/chatStore";
 
-function deliveryLabel(d: string) {
-  if (d === "read") return "Read";
-  if (d === "delivered") return "Delivered";
+function statusLabel(status: string) {
+  if (status === "LOCAL_PENDING") return "Sending…";
+  if (status === "FAILED") return "Failed";
   return "Sent";
 }
 
@@ -24,10 +24,7 @@ export function ChatDrawer({ threadId }: { threadId: string }) {
         </button>
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium">{thread.peer.displayName}</p>
-          <p className="truncate text-xs text-mist">
-            {thread.peer.presence === "online" ? "Online" : thread.peer.handle}
-            {thread.typing ? " · typing…" : ""}
-          </p>
+          <p className="truncate text-xs text-mist">{thread.peer.handle}</p>
         </div>
       </header>
 
@@ -42,7 +39,7 @@ export function ChatDrawer({ threadId }: { threadId: string }) {
             >
               <p>{m.body}</p>
               {m.fromMe ? (
-                <p className="mt-1 text-right text-[10px] opacity-70">{deliveryLabel(m.delivery)}</p>
+                <p className="mt-1 text-right text-[10px] opacity-70">{statusLabel(m.status)}</p>
               ) : null}
             </div>
           </div>
@@ -53,7 +50,7 @@ export function ChatDrawer({ threadId }: { threadId: string }) {
         className="flex gap-2 border-t border-line p-3"
         onSubmit={(e) => {
           e.preventDefault();
-          sendMessage(threadId, draft);
+          void sendMessage(threadId, draft);
           setDraft("");
         }}
       >

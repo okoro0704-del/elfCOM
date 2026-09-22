@@ -293,6 +293,68 @@ export class MessagingService {
     });
   }
 
+  /**
+   * Find-or-create a native DM thread for the authenticated owner with peerTrustId.
+   * Thread id is owner-scoped: `dm:{owner}:{peer}` (peer sees `dm:{peer}:{owner}`).
+   */
+  openDm(
+    auth: { sub: string; sid: string; zk_bind: string },
+    peerTrustId: string,
+  ): ElfComThread {
+    this.assertOwner(auth);
+    this.binder.requireOpen({
+      sid: auth.sid,
+      ownerTrustId: auth.sub,
+      zk_bind: auth.zk_bind,
+    });
+    const peer = peerTrustId.trim();
+    if (!peer || peer === auth.sub) {
+      throw new Error("cannot_dm_self");
+    }
+
+    const existing = this.store
+      .listThreads(auth.sub, { channel: "dm" })
+      .find((t) => t.peerRef === peer);
+    if (existing) {
+      return this.toThreadDto(existing, this.tryRequire(auth), auth);
+    }
+
+    const threadId = nativeDmThreadId(auth.sub, peer);
+    const uk = this.userKey(auth.sub);
+    const titleCreatedAt = new Date().toISOString();
+    const titleAad: SealAad = {
+      ownerTrustId: auth.sub,
+      threadId,
+      messageId: `${threadId}:title`,
+      channel: "dm",
+      createdAt: titleCreatedAt,
+    };
+    const titleCipher = seal(peer, uk, titleAad, `user:${auth.sub}`);
+    const thread = this.store.ensureThread({
+      id: threadId,
+      ownerTrustId: auth.sub,
+      titleCipher,
+      titleCreatedAt,
+      titleSealMode: "user",
+      channel: "dm",
+      peerRef: peer,
+      participants: [auth.sub, peer],
+    });
+    void persistThread({
+      id: thread.id,
+      ownerTrustId: thread.ownerTrustId,
+      channel: thread.channel,
+      peerRef: thread.peerRef,
+      titleCipher: thread.titleCipher,
+      titleCreatedAt: thread.titleCreatedAt,
+      titleSealMode: thread.titleSealMode,
+      peerHandleCipher: thread.peerHandleCipher,
+      participants: thread.participants,
+      unreadCount: thread.unreadCount,
+    });
+    return this.toThreadDto(thread, this.tryRequire(auth), auth);
+  }
+
   async sendMessage(
     auth: { sub: string; sid: string; zk_bind: string },
     input: {
@@ -317,6 +379,7 @@ export class MessagingService {
     let thread = this.store.getThread(auth.sub, threadId);
     const uk = this.userKey(auth.sub);
     const preferredChannel = input.channel ?? (thread?.channel as ElfComChannel | undefined) ?? "dm";
+    const peerRef = input.peerRef ?? thread?.peerRef;
 
     if (!thread) {
       const titleCreatedAt = new Date().toISOString();
@@ -328,7 +391,9 @@ export class MessagingService {
         createdAt: titleCreatedAt,
       };
       const titleCipher = seal(
-        preferredChannel === "dm" ? "Direct message" : `${preferredChannel} thread`,
+        preferredChannel === "dm"
+          ? peerRef ?? "Direct message"
+          : `${preferredChannel} thread`,
         uk,
         titleAadFields,
         `user:${auth.sub}`,
@@ -340,8 +405,8 @@ export class MessagingService {
         titleCreatedAt,
         titleSealMode: "user",
         channel: preferredChannel,
-        peerRef: input.peerRef,
-        participants: [auth.sub],
+        peerRef,
+        participants: peerRef ? [auth.sub, peerRef] : [auth.sub],
       });
       void persistThread({
         id: thread.id,
@@ -355,6 +420,11 @@ export class MessagingService {
         participants: thread.participants,
         unreadCount: thread.unreadCount,
       });
+    } else if (peerRef && !thread.peerRef) {
+      thread.peerRef = peerRef;
+      if (!thread.participants.includes(peerRef)) {
+        thread.participants = [...thread.participants, peerRef];
+      }
     }
 
     const messageId = randomUUID();
@@ -469,6 +539,19 @@ export class MessagingService {
       channel: (route.channel ?? thread.channel) as ElfComChannel,
       ts: createdAt,
     });
+
+    // Native TrustID↔TrustID DM: mirror into peer inbox + fan-out WS (owner-scoped threads).
+    const dmPeer = thread.peerRef ?? input.peerRef;
+    if ((route.channel ?? thread.channel) === "dm" && dmPeer && dmPeer !== auth.sub) {
+      this.mirrorNativeDmToPeer({
+        fromTrustId: auth.sub,
+        peerTrustId: dmPeer,
+        body: input.body,
+        messageId,
+        createdAt,
+        tenantId: input.tenantId,
+      });
+    }
 
     return {
       id: messageId,
@@ -719,6 +802,113 @@ export class MessagingService {
     if (!auth.sub) throw new Error("missing_sub");
   }
 
+  /**
+   * Deliver a native DM into the peer's owner-scoped inbox and emit realtime events to them.
+   * Peer thread id: `dm:{peer}:{from}` — separate from sender's `dm:{from}:{peer}`.
+   */
+  private mirrorNativeDmToPeer(input: {
+    fromTrustId: string;
+    peerTrustId: string;
+    body: string;
+    messageId: string;
+    createdAt: string;
+    tenantId?: string;
+  }) {
+    const peerOwner = input.peerTrustId;
+    const peerThreadId = nativeDmThreadId(peerOwner, input.fromTrustId);
+    const uk = this.userKey(peerOwner);
+    let peerThread = this.store.getThread(peerOwner, peerThreadId);
+
+    if (!peerThread) {
+      const titleAad: SealAad = {
+        ownerTrustId: peerOwner,
+        threadId: peerThreadId,
+        messageId: `${peerThreadId}:title`,
+        channel: "dm",
+        createdAt: input.createdAt,
+      };
+      const titleCipher = seal(input.fromTrustId, uk, titleAad, `user:${peerOwner}`);
+      peerThread = this.store.ensureThread({
+        id: peerThreadId,
+        ownerTrustId: peerOwner,
+        titleCipher,
+        titleCreatedAt: input.createdAt,
+        titleSealMode: "user",
+        channel: "dm",
+        peerRef: input.fromTrustId,
+        participants: [peerOwner, input.fromTrustId],
+      });
+      void persistThread({
+        id: peerThread.id,
+        ownerTrustId: peerThread.ownerTrustId,
+        channel: peerThread.channel,
+        peerRef: peerThread.peerRef,
+        titleCipher: peerThread.titleCipher,
+        titleCreatedAt: peerThread.titleCreatedAt,
+        titleSealMode: peerThread.titleSealMode,
+        peerHandleCipher: peerThread.peerHandleCipher,
+        participants: peerThread.participants,
+        unreadCount: peerThread.unreadCount,
+      });
+    }
+
+    const inboundId = input.messageId;
+    const existing = this.store
+      .listMessages(peerOwner, peerThreadId)
+      .some((m) => m.id === inboundId);
+    if (!existing) {
+      const aad: SealAad = {
+        ownerTrustId: peerOwner,
+        threadId: peerThreadId,
+        messageId: inboundId,
+        channel: "dm",
+        createdAt: input.createdAt,
+      };
+      const bodyCipher = seal(input.body, uk, aad, `user:${peerOwner}`);
+      this.store.appendMessage({
+        id: inboundId,
+        threadId: peerThreadId,
+        ownerTrustId: peerOwner,
+        senderId: input.fromTrustId,
+        channel: "dm",
+        createdAt: input.createdAt,
+        bodyCipher,
+        sealMode: "user",
+        direction: "inbound",
+      });
+      void persistMessage({
+        id: inboundId,
+        threadId: peerThreadId,
+        ownerTrustId: peerOwner,
+        senderId: input.fromTrustId,
+        channel: "dm",
+        direction: "inbound",
+        sealMode: "user",
+        bodyCipher,
+        createdAt: input.createdAt,
+      });
+    }
+
+    webSocketService.emit({
+      typ: "message.created",
+      userId: peerOwner,
+      tenantId: input.tenantId,
+      threadId: peerThreadId,
+      messageId: inboundId,
+      channel: "dm",
+      ts: input.createdAt,
+      meta: { direction: "inbound", fromTrustId: input.fromTrustId },
+    });
+    webSocketService.emit({
+      typ: "thread.updated",
+      userId: peerOwner,
+      tenantId: input.tenantId,
+      threadId: peerThreadId,
+      channel: "dm",
+      ts: input.createdAt,
+    });
+  }
+
   private tryRequire(auth: { sid: string; sub: string; zk_bind: string }) {
     try {
       return this.binder.requireOpen({
@@ -731,6 +921,11 @@ export class MessagingService {
       throw err;
     }
   }
+}
+
+/** Owner-scoped native DM thread id — never shared across owners. */
+export function nativeDmThreadId(ownerTrustId: string, peerTrustId: string): string {
+  return `dm:${ownerTrustId}:${peerTrustId}`;
 }
 
 function titleAadFields(t: {
