@@ -73,8 +73,9 @@
 ### 1.6 Persistence
 
 - **E2:** PostgreSQL is the durable source of truth for threads/messages (`PostgresMessageStore`).
-- `MemoryMessageStore` remains for unit tests / explicit non-production only.
-- Production refuses memory fallback when `DATABASE_URL` is missing or unreachable.
+- `MemoryMessageStore` is used only when `DATABASE_URL` is unset outside production (unit tests).
+- Production refuses to start without `DATABASE_URL`; whenever it is set, an unreachable Postgres fails startup.
+- `/health` pings Postgres per call and reports `DEGRADED` / `UNAVAILABLE` during outages; sends return 5xx.
 - Directory / session binder / WS registry remain process-local (not E2).
 
 ### 1.7 Tests
@@ -83,7 +84,7 @@
 |-------|----------|
 | `elfcom-crypto` session-bind.test | Bind/open, bad zk_bind, seal AAD |
 | `elfcom-connectors` whatsapp/telegram/email tests | parseIngress (+ WA challenge) |
-| `elfcom-node` | **No dedicated tests** |
+| `elfcom-node` | Router, WS, primitive, consumer DM, dedupe, HospitalityOS E2E; E2 Postgres SoT (20× concurrent DM open / send, isolation), real process restart, DB outage (`npm run test:e2`, needs `DATABASE_URL`) |
 | `elfcom-console` | **No tests** |
 | Instagram / X / webhook E2E / LifeOS adapter | **Missing** |
 

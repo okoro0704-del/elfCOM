@@ -13,6 +13,7 @@ import { messagingService } from "./services/messaging.js";
 import {
   initMessageStore,
   messagingPersistenceStatus,
+  pingDatabase,
 } from "./persistence/bootstrap.js";
 import { apnsConfigured } from "./services/providers/apns.provider.js";
 import { fcmConfigured } from "./services/providers/fcm.provider.js";
@@ -60,6 +61,7 @@ const registry = createConnectorRegistry({
 messagingService.setConnectorRegistry(registry);
 
 app.get("/health", async () => {
+  if (messageStore.kind === "postgres") await pingDatabase();
   const messaging = messagingPersistenceStatus();
   return {
     ok: true,

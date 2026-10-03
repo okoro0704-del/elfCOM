@@ -42,7 +42,8 @@ export function messagingPersistenceStatus(): {
       sourceOfTruth: "postgres",
       database: dbReady ? "READY" : "UNAVAILABLE",
       status: dbReady ? "READY" : "DEGRADED",
-      ...(lastDbError ? { error: lastDbError } : {}),
+      // Raw driver errors include internal hostnames — expose a stable code only.
+      ...(dbReady ? {} : { error: "database_unreachable" }),
     };
   }
   return {
@@ -54,8 +55,9 @@ export function messagingPersistenceStatus(): {
 
 /**
  * Initialize message store.
- * Production requires DATABASE_URL and a working Postgres — fail closed.
- * Development may use memory when DATABASE_URL is unset (tests).
+ * Production requires DATABASE_URL. Whenever DATABASE_URL is set, an unreachable
+ * Postgres fails startup in every environment. Memory is used only when the URL is
+ * unset outside production (tests / isolated dev).
  */
 export async function initMessageStore(): Promise<MessageStore> {
   const hasUrl = Boolean(process.env.DATABASE_URL);
@@ -83,32 +85,37 @@ export async function initMessageStore(): Promise<MessageStore> {
   } catch (err) {
     lastDbError = err instanceof Error ? err.message : String(err);
     dbReady = false;
-    if (!config.isDev) {
-      throw new Error(`PostgreSQL unavailable at startup: ${lastDbError}`);
-    }
-    console.warn(
-      "[elfcom] PostgreSQL unavailable — falling back to MemoryMessageStore (dev only)",
-      lastDbError,
-    );
-    store = new MemoryMessageStore();
-    return store;
+    // DATABASE_URL set means durability was requested — never pretend with memory.
+    throw new Error(`PostgreSQL unavailable at startup: ${lastDbError}`);
   }
 }
 
-export async function pingDatabase(): Promise<boolean> {
+export async function pingDatabase(timeoutMs = 2000): Promise<boolean> {
   if (!prisma) {
     dbReady = false;
     return false;
   }
+  let timer: NodeJS.Timeout | undefined;
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await Promise.race([
+      prisma.$queryRaw`SELECT 1`,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("database_ping_timeout")), timeoutMs);
+      }),
+    ]);
     dbReady = true;
     lastDbError = null;
     return true;
   } catch (err) {
+    const message = err instanceof Error ? err.message.trim() : String(err);
+    if (dbReady || lastDbError !== message) {
+      console.warn("[elfcom] Postgres health ping failed:", message);
+    }
     dbReady = false;
-    lastDbError = err instanceof Error ? err.message : String(err);
+    lastDbError = message;
     return false;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 

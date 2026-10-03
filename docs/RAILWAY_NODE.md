@@ -72,7 +72,11 @@ Railway sets `PORT` automatically — `elfcom-node` already reads `PORT`.
      }
    }
    ```
-   `"memory"` means `DATABASE_URL` is still missing on the API (or non-production fallback). Production refuses memory fallback.
+   `"memory"` means `DATABASE_URL` is missing on the API. Production refuses to start without it.
+   Whenever `DATABASE_URL` is set, an unreachable Postgres fails startup (no memory fallback in any environment).
+   `/health` pings Postgres on every call (2 s timeout). During an outage it reports
+   `messaging: { status: "DEGRADED", sourceOfTruth: "postgres", database: "UNAVAILABLE", error: "database_unreachable" }`
+   and sends fail with 5xx — nothing is acknowledged or emitted without a DB commit.
 
 ## Persistence architecture (E2)
 

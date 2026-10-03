@@ -36,7 +36,7 @@
     "db:generate": "prisma generate --schema=prisma/schema.prisma",
     "db:push": "prisma db push --schema=prisma/schema.prisma",
     "db:migrate": "prisma migrate deploy --schema=prisma/schema.prisma",
-    "test": "tsc -p tsconfig.json && node --import tsx --test --test-concurrency=1 src/services/router.service.test.ts src/services/websocket.service.test.ts src/services/primitive.test.ts src/services/push/notify.service.test.ts src/services/consumer-dm.test.ts src/services/postgres-sot.test.ts tests/e2e/hospitalityos-elfcom.test.ts tests/e2e/client-dedupe.test.ts tests/e2e/postgres-restart.test.ts",
-    "test:e2": "tsc -p tsconfig.json && node --import tsx --test --test-concurrency=1 src/services/postgres-sot.test.ts tests/e2e/postgres-restart.test.ts"
+    "test": "tsc -p tsconfig.json && node --import tsx --test --test-concurrency=1 src/services/router.service.test.ts src/services/websocket.service.test.ts src/services/primitive.test.ts src/services/push/notify.service.test.ts src/services/consumer-dm.test.ts src/services/postgres-sot.test.ts tests/e2e/hospitalityos-elfcom.test.ts tests/e2e/client-dedupe.test.ts tests/e2e/postgres-restart.test.ts tests/e2e/postgres-outage.test.ts",
+    "test:e2": "tsc -p tsconfig.json && node --import tsx --test --test-concurrency=1 src/services/postgres-sot.test.ts tests/e2e/postgres-restart.test.ts tests/e2e/postgres-outage.test.ts"
   }
 }

@@ -53,12 +53,22 @@ test("E2 Postgres SoT: commit, read, isolation, concurrent DM, concurrent send",
     return;
   }
 
-  const prisma = new PrismaClient();
-  // Wait briefly for flaky Railway TCP proxy
+  // A public TCP proxy drops some fresh connects; open a fixed pool up front so
+  // the concurrency bursts below exercise DB constraints, not connect flakiness.
+  const POOL = 5;
+  const dbUrl = new URL(process.env.DATABASE_URL!);
+  if (!dbUrl.searchParams.has("connection_limit")) {
+    dbUrl.searchParams.set("connection_limit", String(POOL));
+  }
+  if (!dbUrl.searchParams.has("pool_timeout")) dbUrl.searchParams.set("pool_timeout", "60");
+  const prisma = new PrismaClient({ datasourceUrl: dbUrl.toString() });
   let ready = false;
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 30; i++) {
     try {
-      await prisma.$queryRaw`SELECT 1`;
+      const round = await Promise.allSettled(
+        Array.from({ length: POOL }, () => prisma.$queryRaw`SELECT pg_sleep(0.3)::text`),
+      );
+      if (round.some((r) => r.status === "rejected")) throw new Error("pool not warm");
       ready = true;
       break;
     } catch {
