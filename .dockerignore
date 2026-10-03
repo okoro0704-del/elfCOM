@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+.env
+**/.env
+.netlify
+netlify-sites.json
+e2e-out.txt
+apps/web/android
+apps/web/ios

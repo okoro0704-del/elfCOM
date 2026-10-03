@@ -3,7 +3,7 @@
 # start:migrate required it ? crash loop; stale 2026-09-04 build stayed live.
 FROM node:20-alpine AS build
 WORKDIR /repo
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json tsconfig.base.json ./
 COPY apps ./apps
 COPY packages ./packages
 COPY adapters ./adapters
