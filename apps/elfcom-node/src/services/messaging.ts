@@ -796,8 +796,40 @@ export class MessagingService {
     const owner = input.ownerTrustId;
     if (!owner) throw new Error("missing_owner_trust_id");
     const uk = this.userKey(owner);
-    let thread = this.store.getThread(owner, input.threadId);
-    if (!thread) {
+    const existing = await this.store.getThread(owner, input.threadId);
+    const channel = existing?.channel ?? "dm";
+
+    const messageId = randomUUID();
+    const createdAt = new Date().toISOString();
+    const aad: SealAad = {
+      ownerTrustId: owner,
+      threadId: input.threadId,
+      messageId,
+      channel,
+      createdAt,
+    };
+    const bodyCipher = seal(input.body, uk, aad, `user:${owner}`);
+    const storedMessage = {
+      id: messageId,
+      threadId: input.threadId,
+      ownerTrustId: owner,
+      senderId: owner,
+      channel,
+      createdAt,
+      bodyCipher,
+      sealMode: "user" as const,
+      direction: "outbound" as const,
+    };
+
+    let thread: StoredThread;
+    if (existing) {
+      thread = (
+        await this.store.commitMessage({
+          thread: { existingId: existing.id, ownerTrustId: owner },
+          message: storedMessage,
+        })
+      ).thread;
+    } else {
       const titleCreatedAt = new Date().toISOString();
       const titleAadFields: SealAad = {
         ownerTrustId: owner,
@@ -812,64 +844,22 @@ export class MessagingService {
         titleAadFields,
         `user:${owner}`,
       );
-      thread = this.store.ensureThread({
-        id: input.threadId,
-        ownerTrustId: owner,
-        titleCipher,
-        titleCreatedAt,
-        titleSealMode: "user",
-        channel: "dm",
-        peerRef: input.peerRef,
-        participants: input.peerRef ? [owner, input.peerRef] : [owner],
-      });
-      void persistThread({
-        id: thread.id,
-        ownerTrustId: thread.ownerTrustId,
-        channel: thread.channel,
-        peerRef: thread.peerRef,
-        titleCipher: thread.titleCipher,
-        titleCreatedAt: thread.titleCreatedAt,
-        titleSealMode: thread.titleSealMode,
-        peerHandleCipher: thread.peerHandleCipher,
-        participants: thread.participants,
-        unreadCount: thread.unreadCount,
-      });
+      thread = (
+        await this.store.commitMessage({
+          thread: {
+            id: input.threadId,
+            ownerTrustId: owner,
+            titleCipher,
+            titleCreatedAt,
+            titleSealMode: "user",
+            channel: "dm",
+            peerRef: input.peerRef,
+            participants: input.peerRef ? [owner, input.peerRef] : [owner],
+          },
+          message: storedMessage,
+        })
+      ).thread;
     }
-
-    const messageId = randomUUID();
-    const createdAt = new Date().toISOString();
-    const aad: SealAad = {
-      ownerTrustId: owner,
-      threadId: thread.id,
-      messageId,
-      channel: thread.channel,
-      createdAt,
-    };
-    const bodyCipher = seal(input.body, uk, aad, `user:${owner}`);
-
-    this.store.appendMessage({
-      id: messageId,
-      threadId: thread.id,
-      ownerTrustId: owner,
-      senderId: owner,
-      channel: thread.channel,
-      createdAt,
-      bodyCipher,
-      sealMode: "user",
-      direction: "outbound",
-    });
-
-    void persistMessage({
-      id: messageId,
-      threadId: thread.id,
-      ownerTrustId: owner,
-      senderId: owner,
-      channel: thread.channel,
-      direction: "outbound",
-      sealMode: "user",
-      bodyCipher,
-      createdAt,
-    });
 
     webSocketService.emit({
       typ: "message.created",
@@ -897,7 +887,7 @@ export class MessagingService {
     });
 
     if (input.peerRef && input.peerRef !== owner) {
-      this.mirrorNativeDmToPeer({
+      await this.mirrorNativeDmToPeer({
         fromTrustId: owner,
         peerTrustId: input.peerRef,
         body: input.body,

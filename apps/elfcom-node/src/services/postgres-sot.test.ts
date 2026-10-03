@@ -170,6 +170,29 @@ test("E2 Postgres SoT: commit, read, isolation, concurrent DM, concurrent send",
   });
   assert.equal((after.json() as { messages: unknown[] }).messages.length, 20);
 
+  // Digi-authority delegated send commits to Postgres for owner + peer mirror
+  const delegated = await messagingService.sendDelegatedAuthorityMessage({
+    ownerTrustId: A,
+    digiOwnerId: `digi-${suffix}`,
+    actor: "digi-test",
+    threadId,
+    body: "delegated durable",
+    peerRef: B,
+    grantId: "grant-test",
+    jti: `jti-${suffix}`,
+    correlationId: `corr-${suffix}`,
+    actionId: "message.send",
+  });
+  const ownerRow = await prisma.message.findUnique({
+    where: { id_ownerTrustId: { id: delegated.id, ownerTrustId: A } },
+  });
+  assert.ok(ownerRow, "delegated message must be committed for owner");
+  const peerRow = await prisma.message.findUnique({
+    where: { id_ownerTrustId: { id: delegated.id, ownerTrustId: B } },
+  });
+  assert.ok(peerRow, "delegated message must be mirrored to peer");
+  assert.ok(!ownerRow.bodyCipherJson.includes("delegated durable"), "body stays sealed");
+
   // Cleanup test rows
   await prisma.message.deleteMany({ where: { ownerTrustId: { in: [A, B] } } });
   await prisma.thread.deleteMany({ where: { ownerTrustId: { in: [A, B] } } });
