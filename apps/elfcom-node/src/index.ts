@@ -9,6 +9,7 @@ import { directoryRoutes } from "./routes/directory.js";
 import { callRoutes } from "./routes/calls.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
 import { authorityRoutes, getAuthorityMetrics } from "./routes/authority.js";
+import { pdiRoutes } from "./routes/pdi.js";
 import { messagingService } from "./services/messaging.js";
 import {
   initMessageStore,
@@ -112,6 +113,7 @@ app.get("/health", async () => {
 
 await v1Routes(app);
 await authorityRoutes(app);
+await pdiRoutes(app);
 await primitiveRoutes(app);
 await directoryRoutes(app);
 await notificationRoutes(app);

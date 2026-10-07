@@ -64,4 +64,6 @@ export const config = {
   vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? "",
   vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? "",
   vapidSubject: process.env.VAPID_SUBJECT ?? "mailto:ops@elfcom.me",
+  /** DDI service credential for the PDI inbox read. Unset fails closed. */
+  pdiServiceToken: process.env.ELFCOM_PDI_SERVICE_TOKEN ?? "",
 };

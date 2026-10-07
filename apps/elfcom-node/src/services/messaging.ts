@@ -776,6 +776,17 @@ export class MessagingService {
     if (!auth.sub) throw new Error("missing_sub");
   }
 
+  /** Metadata only. Titles and bodies stay sealed. */
+  async listInboxForOwner(ownerRef: string) {
+    const threads = await this.store.listThreads(ownerRef);
+    return threads.map((thread) => ({
+      id: thread.id,
+      channel: thread.channel,
+      peerRef: thread.peerRef,
+      unreadCount: thread.unreadCount,
+    }));
+  }
+
   /**
    * Digi-authority delegated send (Phase T4).
    * Owner = TrustID subject from verified capability; performedBy = Digi actor.
