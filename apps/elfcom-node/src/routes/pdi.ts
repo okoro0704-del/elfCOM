@@ -12,7 +12,7 @@ function serviceTokenMatches(header: string | undefined) {
   return timingSafeEqual(presented, required);
 }
 
-/** PDI read of an owner's thread list. Digi owner mapping is supplied by DDI, not by a product. */
+/** PDI read of the human mailbox. ownerTrustId is the TrustID subject, supplied by DDI. */
 export async function pdiRoutes(app: FastifyInstance) {
   app.get("/v1/pdi/inbox", async (req, reply) => {
     if (!config.pdiServiceToken) {
@@ -21,13 +21,13 @@ export async function pdiRoutes(app: FastifyInstance) {
     if (!serviceTokenMatches(req.headers.authorization)) {
       return reply.code(401).send({ error: "unauthorized" });
     }
-    const ownerRef = typeof (req.query as { ownerRef?: string }).ownerRef === "string" ? (req.query as { ownerRef: string }).ownerRef : "";
-    if (!ownerRef.startsWith("elfcom:")) {
+    const ownerTrustId = typeof (req.query as { ownerTrustId?: string }).ownerTrustId === "string" ? (req.query as { ownerTrustId: string }).ownerTrustId : "";
+    if (!ownerTrustId || ownerTrustId.startsWith("elfcom:") || /\s/.test(ownerTrustId)) {
       return reply.code(400).send({ error: "invalid_owner" });
     }
     try {
-      const threads = await messagingService.listInboxForOwner(ownerRef);
-      return { ownerRef, threads };
+      const threads = await messagingService.listInboxForOwner(ownerTrustId);
+      return { ownerTrustId, threads };
     } catch {
       return reply.code(503).send({ error: "provider_unavailable" });
     }

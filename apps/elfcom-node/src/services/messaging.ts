@@ -776,9 +776,9 @@ export class MessagingService {
     if (!auth.sub) throw new Error("missing_sub");
   }
 
-  /** Metadata only. Titles and bodies stay sealed. */
-  async listInboxForOwner(ownerRef: string) {
-    const threads = await this.store.listThreads(ownerRef);
+  /** Metadata only. Titles and bodies stay sealed. ownerTrustId is the human mailbox key. */
+  async listInboxForOwner(ownerTrustId: string) {
+    const threads = await this.store.listThreads(ownerTrustId);
     return threads.map((thread) => ({
       id: thread.id,
       channel: thread.channel,
